@@ -14,15 +14,6 @@ foreach ($unreadMails as $mail) {
     $order['mail_id'] = $mail['id'];
     $orders[] = $order;
 }
-// 加這段 ↓↓↓
-foreach ($unreadMails as $mail) {
-    echo '<hr><b>ID: ' . $mail['id'] . ' | 主旨: ' . htmlspecialchars($mail['subject']) . '</b>';
-    echo '<pre style="font-size:11px; background:#f0f0f0; padding:10px; overflow:auto;">';
-    echo htmlspecialchars($mail['html_body']);
-    echo '</pre>';
-}
-die(); // 先停在這，只看原始碼
-// 加這段 ↑↑↑
 
 // 依 OTA 訂單號分組，同訂單號摺疊
 $groups = [];
@@ -32,6 +23,24 @@ foreach ($orders as $order) {
         : 'unique_' . $order['mail_id'];
     $groups[$key][] = $order;
 }
+
+// 完整度評分：分數越高資訊越完整
+function scoreOrder($order) {
+    $score = 0;
+    if ($order['customer_name']  !== '無' && $order['customer_name']  !== '請查後台') $score++;
+    if ($order['check_in']       !== '無' && $order['check_in']       !== '請查後台') $score++;
+    if ($order['check_out']      !== '無' && $order['check_out']      !== '請查後台') $score++;
+    if ($order['owl_number']     !== '無')  $score++;
+    if ($order['amount']         > 0)       $score++;
+    if ($order['customer_phone'] !== '無')  $score++;
+    return $score;
+}
+
+// 每組按完整度降冪排列，第一筆當主列，其餘收折
+foreach ($groups as $ota_key => &$group) {
+    usort($group, fn($a, $b) => scoreOrder($b) - scoreOrder($a));
+}
+unset($group);
 ?>
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -39,6 +48,9 @@ foreach ($orders as $order) {
     <meta charset="UTF-8">
     <title>羅東幸福商旅 - 自動訂房核對系統</title>
     <style>
+        html {
+            font-size: 125%;
+        }
         body {
             font-family: "Microsoft JhengHei", sans-serif;
             background-color: #f8f9fa;
@@ -46,7 +58,7 @@ foreach ($orders as $order) {
             padding: 20px;
         }
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             background: white;
             padding: 25px;
@@ -61,43 +73,58 @@ foreach ($orders as $order) {
             padding-bottom: 15px;
             margin-bottom: 20px;
         }
-        h1 { color: #642100; margin: 0; font-size: 24px; }
+        h1 { color: #642100; margin: 0; font-size: 1.5rem; }
         .btn-refresh {
             background-color: #27ae60;
             color: white;
             border: none;
-            padding: 10px 20px;
-            font-size: 16px;
+            padding: 0.6rem 1.25rem;
+            font-size: 1rem;
             font-weight: bold;
             border-radius: 5px;
             cursor: pointer;
         }
         .btn-refresh:hover { background-color: #219653; }
+
+        /* 表格 */
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #dee2e6; padding: 10px; text-align: left; font-size: 14px; }
-        th { background-color: #f1f3f5; color: #495057; font-weight: bold; }
+        th, td { border: 1px solid #dee2e6; padding: 0.625rem; text-align: left; font-size: 0.875rem; }
+        th {
+            background-color: #f1f3f5;
+            color: #495057;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
         tr.main-row:hover { background-color: #fdf6f0; }
 
         /* Badge */
         .badge {
-            padding: 4px 8px; border-radius: 4px;
-            font-size: 12px; font-weight: bold; color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: white;
             white-space: nowrap;
         }
-        .bg-booking   { background-color: #003580; }
-        .bg-agoda     { background-color: #e12d6e; }
-        .bg-trip      { background-color: #ff9900; }
-        .bg-airbnb    { background-color: #FF385C; }
+        .bg-booking  { background-color: #003580; }
+        .bg-agoda    { background-color: #e12d6e; }
+        .bg-trip     { background-color: #ff9900; }
+        .bg-airbnb   { background-color: #FF385C; }
+        .bg-asiayo   { background-color: #97af15; }
+        .bg-expedia  { background-color: #00A8E0; }
         .bg-cancelled { background-color: #c0392b; }
-        .bg-unknown   { background-color: #6c757d; }
+        .bg-unknown  { background-color: #6c757d; }
 
         /* 備註按鈕 */
         .btn-remark {
             background: #fff3cd;
             border: 1px solid #ffc107;
             border-radius: 4px;
-            padding: 4px 10px;
-            font-size: 12px;
+            padding: 0.25rem 0.625rem;
+            font-size: 0.75rem;
             cursor: pointer;
             color: #856404;
             white-space: nowrap;
@@ -106,13 +133,13 @@ foreach ($orders as $order) {
 
         /* 摺疊行 */
         .collapse-row { background-color: #f8f9ff; }
-        .collapse-row td { padding: 6px 10px; font-size: 13px; color: #555; }
+        .collapse-row td { padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: #555; }
         .btn-expand {
             background: none;
             border: 1px solid #adb5bd;
             border-radius: 4px;
-            padding: 2px 8px;
-            font-size: 11px;
+            padding: 0.125rem 0.5rem;
+            font-size: 0.6875rem;
             cursor: pointer;
             color: #495057;
         }
@@ -142,7 +169,7 @@ foreach ($orders as $order) {
             position: relative;
         }
         .modal-title {
-            font-size: 16px;
+            font-size: 1rem;
             font-weight: bold;
             color: #642100;
             margin-bottom: 16px;
@@ -150,7 +177,7 @@ foreach ($orders as $order) {
             border-bottom: 2px solid #f0e0d6;
         }
         .modal-content {
-            font-size: 14px;
+            font-size: 0.875rem;
             line-height: 1.8;
             color: #333;
             white-space: pre-wrap;
@@ -161,15 +188,15 @@ foreach ($orders as $order) {
             top: 12px; right: 16px;
             background: none;
             border: none;
-            font-size: 22px;
+            font-size: 1.375rem;
             cursor: pointer;
             color: #888;
             line-height: 1;
         }
         .modal-close:hover { color: #333; }
 
-        .count-text { font-size: 16px; color: #666; }
-        .remark-short { color: #c0392b; font-size: 13px; }
+        .count-text { font-size: 1rem; color: #666; }
+        .remark-short { color: #c0392b; font-size: 0.8125rem; }
     </style>
 </head>
 <body>
@@ -201,7 +228,7 @@ foreach ($orders as $order) {
         <tbody>
         <?php if (empty($groups)): ?>
             <tr>
-                <td colspan="9" style="text-align:center;color:#999;">🎉 太棒了！目前沒有未處理的訂房信件。</td>
+                <td colspan="11" style="text-align:center;color:#999;">🎉 太棒了！目前沒有未處理的訂房信件。</td>
             </tr>
         <?php else: ?>
             <?php foreach ($groups as $ota_key => $group):
@@ -212,13 +239,14 @@ foreach ($orders as $order) {
                 // badge
                 $badgeClass   = 'bg-unknown';
                 $platformName = $main['platform'];
-                if      (strpos($platformName, 'Airbnb')  !== false) $badgeClass = 'bg-airbnb';
+                if      (strpos($platformName, 'AsiaYo')  !== false) $badgeClass = 'bg-asiayo';
+                elseif  (strpos($platformName, 'Expedia') !== false) $badgeClass = 'bg-expedia';
+                elseif  (strpos($platformName, 'Airbnb')  !== false) $badgeClass = 'bg-airbnb';
                 elseif  (strpos($platformName, 'Booking') !== false) $badgeClass = 'bg-booking';
                 elseif  (strpos($platformName, 'Agoda')   !== false) $badgeClass = 'bg-agoda';
                 elseif  (strpos($platformName, 'Trip')    !== false) $badgeClass = 'bg-trip';
                 if      (strpos($platformName, '(取消)')  !== false) $badgeClass = 'bg-cancelled';
 
-                // Trip.com 備註用 modal
                 $isTrip  = strpos($platformName, 'Trip') !== false;
                 $remark  = htmlspecialchars($main['remark']);
                 $groupId = 'g_' . $main['mail_id'];
@@ -229,7 +257,7 @@ foreach ($orders as $order) {
                     <?php echo $main['mail_id']; ?>
                     <?php if ($count > 1): ?>
                         <br>
-                        <button class="btn-expand" onclick="toggleGroup('<?php echo $groupId; ?>')">
+                        <button class="btn-expand" onclick="toggleGroup('<?php echo $groupId; ?>', this)">
                             +<?php echo $count - 1; ?> 封 ▼
                         </button>
                     <?php endif; ?>
@@ -238,7 +266,7 @@ foreach ($orders as $order) {
                 <td><b><?php echo htmlspecialchars($main['customer_name']); ?></b></td>
                 <td style="white-space:nowrap;min-width:110px;">
                     <span style="color:#087abc;font-weight:bold;"><?php echo htmlspecialchars(OrderParser::toROCDate($main['check_in'])); ?></span><br>
-                    <span style="color:#888;font-size:12px;">至</span>&nbsp;<?php echo htmlspecialchars(OrderParser::toROCDate($main['check_out'])); ?>
+                    <span style="color:#888;font-size:0.75rem;">至</span>&nbsp;<?php echo htmlspecialchars(OrderParser::toROCDate($main['check_out'])); ?>
                 </td>
                 <td style="text-align:center;"><?php echo htmlspecialchars($main['nights']); ?></td>
                 <td style="text-align:center;">
@@ -254,11 +282,9 @@ foreach ($orders as $order) {
                 <td><b style="color:#27ae60;">TWD <?php echo number_format($main['amount']); ?></b></td>
                 <td>
                     <?php if ($isTrip && strlen($main['remark']) > 30): ?>
-                        <button class="btn-remark"
-                            onclick="openModal(<?php echo $main['mail_id']; ?>)">
+                        <button class="btn-remark" onclick="openModal(<?php echo $main['mail_id']; ?>)">
                             📋 查看備註
                         </button>
-                        <!-- 隱藏備註資料供 modal 讀取 -->
                         <span id="remark_<?php echo $main['mail_id']; ?>" style="display:none;"><?php echo $remark; ?></span>
                     <?php else: ?>
                         <div class="remark-short"><?php echo $remark; ?></div>
@@ -269,18 +295,18 @@ foreach ($orders as $order) {
             <?php if ($count > 1): ?>
             <!-- 摺疊的同訂單號其他封 -->
             <tr class="collapse-row" id="<?php echo $groupId; ?>" style="display:none;">
-                <td colspan="9">
+                <td colspan="11">
                     <table style="width:100%;border:none;margin:0;background:transparent;">
                         <thead>
                             <tr style="background:#e8eaf6;">
-                                <th style="border:none;font-size:12px;">信件ID</th>
-                                <th style="border:none;font-size:12px;">平台</th>
-                                <th style="border:none;font-size:12px;">旅客</th>
-                                <th style="border:none;font-size:12px;">日期</th>
-                                <th style="border:none;font-size:12px;">天數</th>
-                                <th style="border:none;font-size:12px;">加床</th>
-                                <th style="border:none;font-size:12px;">金額</th>
-                                <th style="border:none;font-size:12px;">備註</th>
+                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">信件ID</th>
+                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">平台</th>
+                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">旅客</th>
+                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">日期</th>
+                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">天數</th>
+                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">加床</th>
+                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">金額</th>
+                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">備註</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -288,30 +314,32 @@ foreach ($orders as $order) {
                             $exIsTrip = strpos($ex['platform'], 'Trip') !== false;
                             $exRemark = htmlspecialchars($ex['remark']);
                             $exBadge  = 'bg-unknown';
-                            if      (strpos($ex['platform'], 'Airbnb')  !== false) $exBadge = 'bg-airbnb';
+                            if      (strpos($ex['platform'], 'AsiaYo')  !== false) $exBadge = 'bg-asiayo';
+                            elseif  (strpos($ex['platform'], 'Expedia') !== false) $exBadge = 'bg-expedia';
+                            elseif  (strpos($ex['platform'], 'Airbnb')  !== false) $exBadge = 'bg-airbnb';
                             elseif  (strpos($ex['platform'], 'Booking') !== false) $exBadge = 'bg-booking';
                             elseif  (strpos($ex['platform'], 'Agoda')   !== false) $exBadge = 'bg-agoda';
                             elseif  (strpos($ex['platform'], 'Trip')    !== false) $exBadge = 'bg-trip';
                             if      (strpos($ex['platform'], '(取消)')  !== false) $exBadge = 'bg-cancelled';
                         ?>
                         <tr>
-                            <td style="border:none;font-size:12px;"><?php echo $ex['mail_id']; ?></td>
-                            <td style="border:none;font-size:12px;"><span class="badge <?php echo $exBadge; ?>"><?php echo htmlspecialchars($ex['platform']); ?></span></td>
-                            <td style="border:none;font-size:12px;"><?php echo htmlspecialchars($ex['customer_name']); ?></td>
-                            <td style="border:none;font-size:12px;white-space:nowrap;">
+                            <td style="border:none;font-size:0.75rem;"><?php echo $ex['mail_id']; ?></td>
+                            <td style="border:none;font-size:0.75rem;"><span class="badge <?php echo $exBadge; ?>"><?php echo htmlspecialchars($ex['platform']); ?></span></td>
+                            <td style="border:none;font-size:0.75rem;"><?php echo htmlspecialchars($ex['customer_name']); ?></td>
+                            <td style="border:none;font-size:0.75rem;white-space:nowrap;">
                                 <span style="color:#087abc;"><?php echo htmlspecialchars(OrderParser::toROCDate($ex['check_in'])); ?></span>
                                 →&nbsp;<?php echo htmlspecialchars(OrderParser::toROCDate($ex['check_out'])); ?>
                             </td>
-                            <td style="border:none;font-size:12px;text-align:center;"><?php echo htmlspecialchars($ex['nights']); ?></td>
-                            <td style="border:none;font-size:12px;text-align:center;">
+                            <td style="border:none;font-size:0.75rem;text-align:center;"><?php echo htmlspecialchars($ex['nights']); ?></td>
+                            <td style="border:none;font-size:0.75rem;text-align:center;">
                                 <?php if ($ex['extra_bed'] !== '無' && $ex['extra_bed'] !== ''): ?>
                                     <span style="color:#e67e22;font-weight:bold;">🛏 <?php echo htmlspecialchars($ex['extra_bed']); ?></span>
                                 <?php else: ?>
                                     <span style="color:#aaa;">—</span>
                                 <?php endif; ?>
                             </td>
-                            <td style="border:none;font-size:12px;color:#27ae60;">TWD <?php echo number_format($ex['amount']); ?></td>
-                            <td style="border:none;font-size:12px;">
+                            <td style="border:none;font-size:0.75rem;color:#27ae60;">TWD <?php echo number_format($ex['amount']); ?></td>
+                            <td style="border:none;font-size:0.75rem;">
                                 <?php if ($exIsTrip && strlen($ex['remark']) > 30): ?>
                                     <button class="btn-remark" onclick="openModal(<?php echo $ex['mail_id']; ?>)">📋 查看備註</button>
                                     <span id="remark_<?php echo $ex['mail_id']; ?>" style="display:none;"><?php echo $exRemark; ?></span>
@@ -343,10 +371,8 @@ foreach ($orders as $order) {
 </div>
 
 <script>
-// 展開/收折同訂單號列
-function toggleGroup(groupId) {
+function toggleGroup(groupId, btn) {
     const row = document.getElementById(groupId);
-    const btn = event.target;
     if (row.style.display === 'none') {
         row.style.display = 'table-row';
         btn.textContent = btn.textContent.replace('▼', '▲');
@@ -356,24 +382,20 @@ function toggleGroup(groupId) {
     }
 }
 
-// 開啟備註 Modal
 function openModal(mailId) {
     const remark = document.getElementById('remark_' + mailId).textContent;
     document.getElementById('modalContent').textContent = remark;
     document.getElementById('remarkModal').classList.add('active');
 }
 
-// 關閉 Modal
 function closeModal() {
     document.getElementById('remarkModal').classList.remove('active');
 }
 
-// 點擊遮罩關閉
 function closeModalOutside(e) {
     if (e.target === document.getElementById('remarkModal')) closeModal();
 }
 
-// ESC 關閉
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeModal();
 });
