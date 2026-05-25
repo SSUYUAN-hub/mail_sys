@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/auth.php';
+requireLogin();
+
 // index.php
 require_once 'mail_fetcher.php';
 require_once 'order_parser.php';
