@@ -1,17 +1,21 @@
 <?php
-// 確認系統 CA 檔案存在哪裡
-$paths = [
-    '/etc/ssl/certs/ca-certificates.crt',
-    '/etc/ssl/cert.pem',
-    '/etc/pki/tls/certs/ca-bundle.crt',
-    '/usr/local/share/ca-certificates',
-];
-foreach ($paths as $p) {
-    echo $p . ' → ' . (file_exists($p) ? '✅ 存在' : '❌ 不存在') . '<br>';
-}
+$host = getenv('DB_HOST');
+$port = getenv('DB_PORT') ?: '4000';
+$db   = getenv('DB_NAME');
+$user = getenv('DB_USER');
+$pass = getenv('DB_PASS');
 
-// 確認環境變數有沒有吃到
-echo '<hr>';
-echo 'DB_HOST: ' . (getenv('DB_HOST') ?: '❌ 空的') . '<br>';
-echo 'DB_USER: ' . (getenv('DB_USER') ?: '❌ 空的') . '<br>';
-echo 'DB_NAME: ' . (getenv('DB_NAME') ?: '❌ 空的') . '<br>';
+try {
+    $pdo = new PDO(
+        "mysql:host={$host};port={$port};dbname={$db};charset=utf8mb4",
+        $user, $pass,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::MYSQL_ATTR_SSL_CA => '/etc/ssl/certs/ca-certificates.crt',
+            PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false, // 先關掉驗證測試
+        ]
+    );
+    echo '✅ 連線成功！';
+} catch (Exception $e) {
+    echo '❌ ' . $e->getMessage();
+}
