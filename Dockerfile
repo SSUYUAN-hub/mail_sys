@@ -2,9 +2,18 @@
 FROM php:8.3-apache
 
 # 安裝 imap 所需的系統套件
-RUN apt-get update && apt-get install -y \
+RUN apt-get update -o Acquire::Retries=3 && apt-get install -y \
+    unzip \
+    git \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libzip-dev \
     libc-client-dev \
     libkrb5-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
+    && docker-php-ext-install mysqli pdo pdo_mysql gd zip imap \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. 安裝系統套件與 PHP 擴充功能
