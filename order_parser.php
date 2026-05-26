@@ -421,6 +421,63 @@ class OrderParser {
             $data['customer_name']  = self::findValueByLabel($xpath, '旅客姓名');
             $data['customer_phone'] = self::findValueByLabel($xpath, '旅客電話');
             $data['remark']         = self::findValueByLabel($xpath, '特殊需求');
+
+            // ---- 房型名稱（訂購內容表格，background:#f2f2f2 的第一個資料列）----
+            $roomNodes = $xpath->query("//tr[td[contains(@style,'background-color:#f2f2f2')]]/td[1]/div");
+            if ($roomNodes->length > 0) {
+                $rt = trim($roomNodes->item(0)->nodeValue);
+                if ($rt) $data['room_type'] = $rt;
+            }
+
+            // ---- 修改通知解析 ----
+            $isModified = mb_strpos($subject, '修改通知') !== false
+                       || mb_strpos($allText, '修改後') !== false;
+
+            if ($isModified) {
+                $data['is_modified'] = true;
+                $data['platform']    = rtrim($data['platform']) . ' (修改)';
+
+                // 黃色高亮 span = 修改後的值 (background-color: rgb(255, 255, 153))
+                $highlightedDates = [];
+                $hlNodes = $xpath->query("//span[contains(@style,'255, 255, 153')]");
+                foreach ($hlNodes as $node) {
+                    $txt = trim($node->nodeValue);
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $txt)) $highlightedDates[] = $txt;
+                }
+
+                // 原始日期 = 全文所有日期排除黃色部分
+                preg_match_all('/\d{4}-\d{2}-\d{2}/', $allText, $allDM);
+                $origDates = array_values(array_unique(array_filter($allDM[0], fn($d) => !in_array($d, $highlightedDates))));
+                if (isset($origDates[0])) $data['orig_check_in']  = $origDates[0];
+                if (isset($origDates[1])) $data['orig_check_out'] = $origDates[1];
+
+                // 修改後日期填入 check_in/check_out
+                if (isset($highlightedDates[0])) {
+                    $data['check_in']  = $highlightedDates[0];
+                    $data['modified_fields'][] = 'check_in';
+                }
+                if (isset($highlightedDates[1])) {
+                    $data['check_out'] = $highlightedDates[1];
+                    $data['modified_fields'][] = 'check_out';
+                }
+
+                // 金額：取兩個「訂單款項」的值（原始/修改後）
+                $amtVals = [];
+                $amtNodes = $xpath->query("//div[normalize-space(text())='訂單款項']/parent::td/following-sibling::td//span");
+                foreach ($amtNodes as $node) {
+                    $txt = trim($node->nodeValue);
+                    if (preg_match('/([\d,]+)\s*TWD/u', $txt, $m) || preg_match('/TWD\s*([\d,]+)/u', $txt, $m)) {
+                        $amtVals[] = (int)str_replace(',', '', $m[1]);
+                    }
+                }
+                if (isset($amtVals[0])) $data['orig_amount'] = $amtVals[0];
+                if (isset($amtVals[1])) {
+                    $data['amount'] = $amtVals[1];
+                    if ($amtVals[1] !== $amtVals[0]) $data['modified_fields'][] = 'amount';
+                } elseif (isset($amtVals[0])) {
+                    $data['amount'] = $amtVals[0];
+                }
+            }
         }
 
         // ---- 奧丁丁號（OwlTing 格式補抓，非直發信）----
@@ -521,17 +578,23 @@ class OrderParser {
 
     private static function getEmptyTemplate($defaultPlatform) {
         return [
-            'platform'       => $defaultPlatform,
-            'ota_number'     => '無',
-            'owl_number'     => '無',
-            'check_in'       => '無',
-            'check_out'      => '無',
-            'nights'         => '無',
-            'extra_bed'      => '無',
-            'amount'         => 0,
-            'customer_name'  => '無',
-            'customer_phone' => '無',
-            'remark'         => '無'
+            'platform'        => $defaultPlatform,
+            'ota_number'      => '無',
+            'owl_number'      => '無',
+            'check_in'        => '無',
+            'check_out'       => '無',
+            'nights'          => '無',
+            'extra_bed'       => '無',
+            'amount'          => 0,
+            'customer_name'   => '無',
+            'customer_phone'  => '無',
+            'remark'          => '無',
+            'room_type'       => '無',
+            'is_modified'     => false,
+            'modified_fields' => [],
+            'orig_check_in'   => '無',
+            'orig_check_out'  => '無',
+            'orig_amount'     => 0,
         ];
     }
 

@@ -163,6 +163,8 @@ $user = currentUser();
             box-shadow: 0 2px 4px rgba(0,0,0,0.08);
         }
         tr.main-row:hover { background: #fdf6f0; }
+        tr.modified-row { background: #fffde7 !important; border-left: 4px solid #f39c12; }
+        tr.modified-row:hover { background: #fff9c4 !important; }
 
         .badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; color: white; white-space: nowrap; }
         .bg-booking   { background: #003580; }
@@ -294,6 +296,14 @@ function getBadgeClass(p) {
     return 'bg-unknown';
 }
 
+// 民國年轉換（前端用）
+function toROCDate(dateStr) {
+    if (!dateStr || dateStr === '無') return dateStr;
+    const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return dateStr;
+    return `${parseInt(m[1])-1911}年${parseInt(m[2])}月${parseInt(m[3])}日`;
+}
+
 function escHtml(s) {
     if (s === null || s === undefined) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -316,21 +326,48 @@ function buildMainRow(o, groupId, extraCount) {
         ? `<button class="btn-remark" onclick="openModal(${o.mail_id})">📋 查看備註</button>`
         : `<div class="remark-short">${escHtml(remark)}</div>`;
 
+    // 修改通知：日期欄顯示原始→修改後
+    const isModified = o.is_modified === true;
+    const modFields  = o.modified_fields || [];
+
+    function dateCell(checkInRoc, checkOutRoc, origInRoc, origOutRoc, modFields) {
+        if (!modFields.includes('check_in') && !modFields.includes('check_out')) {
+            return `<span style="color:#087abc;font-weight:bold;">${escHtml(checkInRoc)}</span><br>
+                    <span style="color:#888;font-size:0.75rem;">至</span>&nbsp;${escHtml(checkOutRoc)}`;
+        }
+        const inPart  = modFields.includes('check_in')
+            ? `<span style="color:#888;text-decoration:line-through;font-size:0.75rem;">${escHtml(origInRoc)}</span><br>
+               <span style="color:#e67e22;font-weight:bold;">→ ${escHtml(checkInRoc)}</span>`
+            : `<span style="color:#087abc;font-weight:bold;">${escHtml(checkInRoc)}</span>`;
+        const outPart = modFields.includes('check_out')
+            ? `<span style="color:#888;text-decoration:line-through;font-size:0.75rem;">${escHtml(origOutRoc)}</span><br>
+               <span style="color:#e67e22;font-weight:bold;">→ ${escHtml(checkOutRoc)}</span>`
+            : `${escHtml(checkOutRoc)}`;
+        return inPart + '<br><span style="color:#888;font-size:0.75rem;">至</span>&nbsp;' + outPart;
+    }
+
+    const origInRoc  = o.orig_check_in  && o.orig_check_in  !== '無' ? toROCDate(o.orig_check_in)  : '';
+    const origOutRoc = o.orig_check_out && o.orig_check_out !== '無' ? toROCDate(o.orig_check_out) : '';
+
+    const amountCell = modFields.includes('amount')
+        ? `<span style="color:#888;text-decoration:line-through;font-size:0.75rem;">TWD ${Number(o.orig_amount||0).toLocaleString()}</span><br>
+           <b style="color:#e67e22;">→ TWD ${Number(o.amount).toLocaleString()}</b>`
+        : `<b style="color:#27ae60;">TWD ${Number(o.amount).toLocaleString()}</b>`;
+
+    const roomType = (o.room_type && o.room_type !== '無') ? escHtml(o.room_type) : '<span style="color:#aaa;">—</span>';
+
     return `
-    <tr class="main-row">
+    <tr class="main-row${isModified ? ' modified-row' : ''}">
         <td>${escHtml(String(o.mail_id))}${expandBtn}</td>
         <td><span class="badge ${badge}">${escHtml(o.platform)}</span></td>
+        <td><code style="font-size:0.75rem;">${escHtml(o.ota_number)}</code></td>
         <td><b>${escHtml(o.customer_name)}</b></td>
-        <td style="white-space:nowrap;min-width:110px;">
-            <span style="color:#087abc;font-weight:bold;">${escHtml(o.check_in_roc)}</span><br>
-            <span style="color:#888;font-size:0.75rem;">至</span>&nbsp;${escHtml(o.check_out_roc)}
-        </td>
+        <td style="white-space:nowrap;min-width:110px;">${dateCell(o.check_in_roc, o.check_out_roc, origInRoc, origOutRoc, modFields)}</td>
         <td style="text-align:center;">${escHtml(o.nights)}</td>
         <td style="text-align:center;">${extraBed}</td>
-        <td><code>${escHtml(o.ota_number)}</code></td>
-        <td><small>${escHtml(o.owl_number)}</small></td>
+        <td style="font-size:0.8rem;">${roomType}</td>
         <td>${escHtml(o.customer_phone)}</td>
-        <td><b style="color:#27ae60;">TWD ${Number(o.amount).toLocaleString()}</b></td>
+        <td>${amountCell}</td>
         <td>${remarkCell}</td>
     </tr>`;
 }
@@ -386,10 +423,9 @@ function renderTable(groups) {
         return `<p style="text-align:center;color:#999;padding:3rem 0;">🎉 太棒了！目前沒有未處理的訂房信件。</p>`;
     }
     let html = `<table><thead><tr>
-        <th>信件ID</th><th>來源平台</th><th>旅客姓名</th>
+        <th>信件ID</th><th>來源平台</th><th>OTA 訂單編號</th><th>旅客姓名</th>
         <th style="min-width:110px;">入住 / 退房日期</th>
-        <th style="min-width:50px;">天數</th><th>加床</th>
-        <th>OTA 訂單編號</th><th>奧丁丁內部號</th>
+        <th style="min-width:50px;">天數</th><th>加床</th><th>房型</th>
         <th>聯絡電話</th><th>總金額</th><th>客房備註 (特殊需求)</th>
     </tr></thead><tbody>`;
     groups.forEach(group => {

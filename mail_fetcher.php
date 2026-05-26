@@ -13,9 +13,9 @@ class MailFetcher {
 
     public function fetchUnreadMails() {
     // 先印出環境變數確認
-    echo 'SERVER: ' . $this->server . '<br>';
-    echo 'USER: ' . $this->username . '<br>';
-    echo 'PASS: ' . (empty($this->password) ? '❌ 空的' : '✅ 有值') . '<br>';
+    // echo 'SERVER: ' . $this->server . '<br>';
+    // echo 'USER: ' . $this->username . '<br>';
+    // echo 'PASS: ' . (empty($this->password) ? '❌ 空的' : '✅ 有值') . '<br>';
 
     $this->inbox = imap_open($this->server, $this->username, $this->password);
     if (!$this->inbox) {
