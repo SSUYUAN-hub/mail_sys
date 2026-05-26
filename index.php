@@ -15,11 +15,8 @@ $user = currentUser();
         body {
             font-family: "Microsoft JhengHei", sans-serif;
             background-color: #f8f9fa;
-            margin: 0;
-            padding: 0;
+            margin: 0; padding: 0;
         }
-
-        /* Topbar */
         .topbar {
             background: #642100;
             color: white;
@@ -48,7 +45,7 @@ $user = currentUser();
             white-space: nowrap;
         }
         .btn-back:hover { background: rgba(255,255,255,0.28); }
-        .topbar-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; justify-content: flex-end; }
+        .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
         .topbar-user { font-size: 0.85rem; opacity: 0.9; }
         .btn-logout {
             background: rgba(255,255,255,0.15);
@@ -64,7 +61,6 @@ $user = currentUser();
         }
         .btn-logout:hover { background: rgba(255,255,255,0.28); }
 
-        /* 主容器 */
         .container {
             max-width: 1600px;
             margin: 1.5rem auto;
@@ -73,8 +69,6 @@ $user = currentUser();
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-
-        /* 頁首列 */
         .page-header {
             display: flex;
             justify-content: space-between;
@@ -88,14 +82,7 @@ $user = currentUser();
         .page-header h1 { color: #642100; margin: 0; font-size: 1.3rem; }
         .header-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 
-        /* 狀態列 */
-        .status-bar {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.82rem;
-            color: #666;
-        }
+        .status-bar { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: #666; }
         .status-dot {
             width: 10px; height: 10px;
             border-radius: 50%;
@@ -103,15 +90,22 @@ $user = currentUser();
             flex-shrink: 0;
             transition: background 0.3s;
         }
-        .status-dot.loading  { background: #f39c12; animation: pulse 1s infinite; }
-        .status-dot.success  { background: #27ae60; }
-        .status-dot.error    { background: #c0392b; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50%       { opacity: 0.3; }
+        .status-dot.loading { background: #f39c12; animation: pulse 1s infinite; }
+        .status-dot.success { background: #27ae60; }
+        .status-dot.error   { background: #c0392b; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        .cache-badge {
+            display: inline-block;
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #a5d6a7;
+            border-radius: 4px;
+            padding: 0.15rem 0.5rem;
+            font-size: 0.72rem;
+            font-weight: bold;
         }
 
-        /* 按鈕 */
         .btn-refresh {
             background: #27ae60;
             color: white;
@@ -128,14 +122,9 @@ $user = currentUser();
         .btn-refresh:hover:not(:disabled) { background: #219653; }
         .btn-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        /* 倒數計時 */
-        .countdown {
-            font-size: 0.78rem;
-            color: #999;
-            white-space: nowrap;
-        }
+        .countdown { font-size: 0.78rem; color: #999; white-space: nowrap; }
+        .count-text { font-size: 0.9rem; color: #666; margin-top: 0.2rem; }
 
-        /* Loading 遮罩 */
         .loading-overlay {
             text-align: center;
             padding: 4rem 2rem;
@@ -152,7 +141,6 @@ $user = currentUser();
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* 錯誤訊息 */
         .error-box {
             background: #fde8e8;
             border: 1px solid #f5b7b1;
@@ -163,10 +151,6 @@ $user = currentUser();
             margin: 1rem 0;
         }
 
-        /* 統計列 */
-        .count-text { font-size: 0.9rem; color: #666; }
-
-        /* 表格 */
         table { width: 100%; border-collapse: collapse; margin-top: 0.625rem; }
         th, td { border: 1px solid #dee2e6; padding: 0.625rem; text-align: left; font-size: 0.875rem; }
         th {
@@ -174,21 +158,13 @@ $user = currentUser();
             color: #495057;
             font-weight: bold;
             position: sticky;
-            top: 56px; /* topbar 高度 */
+            top: 56px;
             z-index: 10;
             box-shadow: 0 2px 4px rgba(0,0,0,0.08);
         }
         tr.main-row:hover { background: #fdf6f0; }
 
-        /* Badge */
-        .badge {
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: bold;
-            color: white;
-            white-space: nowrap;
-        }
+        .badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; color: white; white-space: nowrap; }
         .bg-booking   { background: #003580; }
         .bg-agoda     { background: #e12d6e; }
         .bg-trip      { background: #ff9900; }
@@ -198,7 +174,6 @@ $user = currentUser();
         .bg-cancelled { background: #c0392b; }
         .bg-unknown   { background: #6c757d; }
 
-        /* 備註按鈕 */
         .btn-remark {
             background: #fff3cd;
             border: 1px solid #ffc107;
@@ -212,7 +187,6 @@ $user = currentUser();
         }
         .btn-remark:hover { background: #ffe69c; }
 
-        /* 摺疊行 */
         .collapse-row { background: #f8f9ff; }
         .collapse-row td { padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: #555; }
         .btn-expand {
@@ -226,10 +200,8 @@ $user = currentUser();
             font-family: inherit;
         }
         .btn-expand:hover { background: #e9ecef; }
-
         .remark-short { color: #c0392b; font-size: 0.8125rem; }
 
-        /* Modal */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -251,33 +223,14 @@ $user = currentUser();
             box-shadow: 0 8px 32px rgba(0,0,0,0.2);
             position: relative;
         }
-        .modal-title {
-            font-size: 1rem;
-            font-weight: bold;
-            color: #642100;
-            margin-bottom: 1rem;
-            padding-bottom: 0.625rem;
-            border-bottom: 2px solid #f0e0d6;
-        }
-        .modal-content {
-            font-size: 0.875rem;
-            line-height: 1.8;
-            color: #333;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        .modal-close {
-            position: absolute;
-            top: 0.75rem; right: 1rem;
-            background: none; border: none;
-            font-size: 1.375rem; cursor: pointer; color: #888;
-        }
+        .modal-title { font-size: 1rem; font-weight: bold; color: #642100; margin-bottom: 1rem; padding-bottom: 0.625rem; border-bottom: 2px solid #f0e0d6; }
+        .modal-content { font-size: 0.875rem; line-height: 1.8; color: #333; white-space: pre-wrap; word-break: break-word; }
+        .modal-close { position: absolute; top: 0.75rem; right: 1rem; background: none; border: none; font-size: 1.375rem; cursor: pointer; color: #888; }
         .modal-close:hover { color: #333; }
     </style>
 </head>
 <body>
 
-<!-- Topbar -->
 <div class="topbar">
     <div class="topbar-left">
         <a href="portal.php" class="btn-back">← 返回主選單</a>
@@ -299,6 +252,7 @@ $user = currentUser();
             <div class="status-bar">
                 <div class="status-dot loading" id="statusDot"></div>
                 <span id="statusText">連線中...</span>
+                <span id="cacheBadge"></span>
             </div>
             <span class="countdown" id="countdown"></span>
             <button class="btn-refresh" id="btnRefresh" onclick="fetchOrders(true)">
@@ -307,17 +261,15 @@ $user = currentUser();
         </div>
     </div>
 
-    <!-- 內容區 -->
     <div id="mainContent">
         <div class="loading-overlay">
             <div class="spinner"></div>
-            <div>正在連接信箱，讀取最新信件...</div>
-            <div style="font-size:0.8rem;color:#aaa;margin-top:0.5rem;">首次載入需要 10～30 秒，請稍候</div>
+            <div>正在載入訂單資料...</div>
+            <div style="font-size:0.8rem;color:#aaa;margin-top:0.5rem;">首次需連接信箱，約需 10～30 秒</div>
         </div>
     </div>
 </div>
 
-<!-- Modal 彈窗 -->
 <div class="modal-overlay" id="remarkModal" onclick="closeModalOutside(event)">
     <div class="modal-box">
         <button class="modal-close" onclick="closeModal()">✕</button>
@@ -327,93 +279,82 @@ $user = currentUser();
 </div>
 
 <script>
-// ─── 全域狀態 ───────────────────────────────────────────
-let remarkStore   = {};   // mailId → 備註文字
+let remarkStore    = {};
 let countdownTimer = null;
-let autoRefreshTimer = null;
-const AUTO_REFRESH_SEC = 180; // 每 3 分鐘自動重抓
+const CACHE_TTL    = 180; // 秒，與後端一致
 
-// ─── Badge class 對應 ────────────────────────────────────
-function getBadgeClass(platform) {
-    if (platform.includes('AsiaYo'))  return 'bg-asiayo';
-    if (platform.includes('Expedia')) return 'bg-expedia';
-    if (platform.includes('Airbnb'))  return 'bg-airbnb';
-    if (platform.includes('Booking')) return 'bg-booking';
-    if (platform.includes('Agoda'))   return 'bg-agoda';
-    if (platform.includes('Trip'))    return 'bg-trip';
-    if (platform.includes('取消'))    return 'bg-cancelled';
+function getBadgeClass(p) {
+    if (p.includes('AsiaYo'))  return 'bg-asiayo';
+    if (p.includes('Expedia')) return 'bg-expedia';
+    if (p.includes('Airbnb'))  return 'bg-airbnb';
+    if (p.includes('Booking')) return 'bg-booking';
+    if (p.includes('Agoda'))   return 'bg-agoda';
+    if (p.includes('Trip'))    return 'bg-trip';
+    if (p.includes('取消'))    return 'bg-cancelled';
     return 'bg-unknown';
 }
 
-// ─── 建立主列 HTML ───────────────────────────────────────
-function buildMainRow(order, groupId, extraCount) {
-    const badge = getBadgeClass(order.platform);
-    const isTrip = order.platform.includes('Trip');
-    const remark = order.remark || '無';
-    const hasLongRemark = isTrip && remark.length > 30;
+function escHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
-    if (hasLongRemark) {
-        remarkStore[order.mail_id] = remark;
-    }
+function buildMainRow(o, groupId, extraCount) {
+    const badge = getBadgeClass(o.platform);
+    const isTrip = o.platform.includes('Trip');
+    const remark = o.remark || '無';
+    const hasLong = isTrip && remark.length > 30;
+    if (hasLong) remarkStore[o.mail_id] = remark;
 
     const expandBtn = extraCount > 0
-        ? `<br><button class="btn-expand" onclick="toggleGroup('${groupId}', this)">+${extraCount} 封 ▼</button>`
+        ? `<br><button class="btn-expand" onclick="toggleGroup('${groupId}',this)">+${extraCount} 封 ▼</button>`
         : '';
-
-    const extraBed = (order.extra_bed && order.extra_bed !== '無' && order.extra_bed !== '')
-        ? `<span style="color:#e67e22;font-weight:bold;">🛏 ${escHtml(order.extra_bed)}</span>`
+    const extraBed = (o.extra_bed && o.extra_bed !== '無')
+        ? `<span style="color:#e67e22;font-weight:bold;">🛏 ${escHtml(o.extra_bed)}</span>`
         : `<span style="color:#aaa;">—</span>`;
-
-    const remarkCell = hasLongRemark
-        ? `<button class="btn-remark" onclick="openModal(${order.mail_id})">📋 查看備註</button>`
+    const remarkCell = hasLong
+        ? `<button class="btn-remark" onclick="openModal(${o.mail_id})">📋 查看備註</button>`
         : `<div class="remark-short">${escHtml(remark)}</div>`;
 
     return `
     <tr class="main-row">
-        <td>${escHtml(String(order.mail_id))}${expandBtn}</td>
-        <td><span class="badge ${badge}">${escHtml(order.platform)}</span></td>
-        <td><b>${escHtml(order.customer_name)}</b></td>
+        <td>${escHtml(String(o.mail_id))}${expandBtn}</td>
+        <td><span class="badge ${badge}">${escHtml(o.platform)}</span></td>
+        <td><b>${escHtml(o.customer_name)}</b></td>
         <td style="white-space:nowrap;min-width:110px;">
-            <span style="color:#087abc;font-weight:bold;">${escHtml(order.check_in_roc)}</span><br>
-            <span style="color:#888;font-size:0.75rem;">至</span>&nbsp;${escHtml(order.check_out_roc)}
+            <span style="color:#087abc;font-weight:bold;">${escHtml(o.check_in_roc)}</span><br>
+            <span style="color:#888;font-size:0.75rem;">至</span>&nbsp;${escHtml(o.check_out_roc)}
         </td>
-        <td style="text-align:center;">${escHtml(order.nights)}</td>
+        <td style="text-align:center;">${escHtml(o.nights)}</td>
         <td style="text-align:center;">${extraBed}</td>
-        <td><code>${escHtml(order.ota_number)}</code></td>
-        <td><small>${escHtml(order.owl_number)}</small></td>
-        <td>${escHtml(order.customer_phone)}</td>
-        <td><b style="color:#27ae60;">TWD ${Number(order.amount).toLocaleString()}</b></td>
+        <td><code>${escHtml(o.ota_number)}</code></td>
+        <td><small>${escHtml(o.owl_number)}</small></td>
+        <td>${escHtml(o.customer_phone)}</td>
+        <td><b style="color:#27ae60;">TWD ${Number(o.amount).toLocaleString()}</b></td>
         <td>${remarkCell}</td>
     </tr>`;
 }
 
-// ─── 建立摺疊子列 HTML ──────────────────────────────────
 function buildCollapseRow(extras, groupId) {
     if (!extras.length) return '';
-
     const rows = extras.map(ex => {
-        const badge  = getBadgeClass(ex.platform);
+        const badge = getBadgeClass(ex.platform);
         const isTrip = ex.platform.includes('Trip');
         const remark = ex.remark || '無';
         const hasLong = isTrip && remark.length > 30;
         if (hasLong) remarkStore[ex.mail_id] = remark;
-
-        const extraBed = (ex.extra_bed && ex.extra_bed !== '無' && ex.extra_bed !== '')
+        const extraBed = (ex.extra_bed && ex.extra_bed !== '無')
             ? `<span style="color:#e67e22;font-weight:bold;">🛏 ${escHtml(ex.extra_bed)}</span>`
             : `<span style="color:#aaa;">—</span>`;
-
         const remarkCell = hasLong
             ? `<button class="btn-remark" onclick="openModal(${ex.mail_id})">📋 查看備註</button>`
             : `<span class="remark-short">${escHtml(remark)}</span>`;
-
-        return `
-        <tr>
+        return `<tr>
             <td style="border:none;font-size:0.75rem;">${escHtml(String(ex.mail_id))}</td>
             <td style="border:none;font-size:0.75rem;"><span class="badge ${badge}">${escHtml(ex.platform)}</span></td>
             <td style="border:none;font-size:0.75rem;">${escHtml(ex.customer_name)}</td>
             <td style="border:none;font-size:0.75rem;white-space:nowrap;">
-                <span style="color:#087abc;">${escHtml(ex.check_in_roc)}</span>
-                →&nbsp;${escHtml(ex.check_out_roc)}
+                <span style="color:#087abc;">${escHtml(ex.check_in_roc)}</span> →&nbsp;${escHtml(ex.check_out_roc)}
             </td>
             <td style="border:none;font-size:0.75rem;text-align:center;">${escHtml(ex.nights)}</td>
             <td style="border:none;font-size:0.75rem;text-align:center;">${extraBed}</td>
@@ -422,139 +363,136 @@ function buildCollapseRow(extras, groupId) {
         </tr>`;
     }).join('');
 
-    return `
-    <tr class="collapse-row" id="${groupId}" style="display:none;">
-        <td colspan="11">
-            <table style="width:100%;border:none;margin:0;background:transparent;">
-                <thead>
-                    <tr style="background:#e8eaf6;">
-                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">信件ID</th>
-                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">平台</th>
-                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">旅客</th>
-                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">日期</th>
-                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">天數</th>
-                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">加床</th>
-                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">金額</th>
-                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">備註</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </td>
-    </tr>`;
+    return `<tr class="collapse-row" id="${groupId}" style="display:none;"><td colspan="11">
+        <table style="width:100%;border:none;margin:0;background:transparent;">
+            <thead><tr style="background:#e8eaf6;">
+                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">信件ID</th>
+                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">平台</th>
+                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">旅客</th>
+                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">日期</th>
+                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">天數</th>
+                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">加床</th>
+                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">金額</th>
+                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">備註</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </td></tr>`;
 }
 
-// ─── 渲染整個表格 ────────────────────────────────────────
 function renderTable(groups) {
     remarkStore = {};
-
     if (!groups.length) {
         return `<p style="text-align:center;color:#999;padding:3rem 0;">🎉 太棒了！目前沒有未處理的訂房信件。</p>`;
     }
-
-    let tableHtml = `
-    <table>
-        <thead>
-            <tr>
-                <th>信件ID</th>
-                <th>來源平台</th>
-                <th>旅客姓名</th>
-                <th style="min-width:110px;">入住 / 退房日期</th>
-                <th style="min-width:50px;">天數</th>
-                <th>加床</th>
-                <th>OTA 訂單編號</th>
-                <th>奧丁丁內部號</th>
-                <th>聯絡電話</th>
-                <th>總金額</th>
-                <th>客房備註 (特殊需求)</th>
-            </tr>
-        </thead>
-        <tbody>`;
-
+    let html = `<table><thead><tr>
+        <th>信件ID</th><th>來源平台</th><th>旅客姓名</th>
+        <th style="min-width:110px;">入住 / 退房日期</th>
+        <th style="min-width:50px;">天數</th><th>加床</th>
+        <th>OTA 訂單編號</th><th>奧丁丁內部號</th>
+        <th>聯絡電話</th><th>總金額</th><th>客房備註 (特殊需求)</th>
+    </tr></thead><tbody>`;
     groups.forEach(group => {
         const main    = group[0];
         const extras  = group.slice(1);
         const groupId = 'g_' + main.mail_id;
-
-        tableHtml += buildMainRow(main, groupId, extras.length);
-        tableHtml += buildCollapseRow(extras, groupId);
+        html += buildMainRow(main, groupId, extras.length);
+        html += buildCollapseRow(extras, groupId);
     });
-
-    tableHtml += `</tbody></table>`;
-    return tableHtml;
+    return html + '</tbody></table>';
 }
 
-// ─── 主要抓取函式 ────────────────────────────────────────
-async function fetchOrders(manual = false) {
-    setStatus('loading', manual ? '同步中...' : '更新中...');
+// ── 本地時間格式化 ──────────────────────────────────────
+function formatLocalTime(unixTs) {
+    // unixTs 是後端 PHP time()，單位秒
+    const d = new Date(unixTs * 1000);
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+}
+
+// ── 主抓取函式 ──────────────────────────────────────────
+async function fetchOrders(forceRefresh = false) {
+    setStatus('loading', forceRefresh ? '同步中...' : '載入中...');
     document.getElementById('btnRefresh').disabled = true;
     stopCountdown();
 
-    // 第一次載入時才顯示 spinner（之後靜默更新，不蓋掉現有內容）
     const content = document.getElementById('mainContent');
+    // 只有第一次才顯示 loading 動畫
     if (!content.dataset.loaded) {
-        content.innerHTML = `
-            <div class="loading-overlay">
-                <div class="spinner"></div>
-                <div>正在連接信箱，讀取最新信件...</div>
-                <div style="font-size:0.8rem;color:#aaa;margin-top:0.5rem;">首次載入需要 10～30 秒，請稍候</div>
-            </div>`;
+        content.innerHTML = `<div class="loading-overlay">
+            <div class="spinner"></div>
+            <div>正在連接信箱，讀取最新信件...</div>
+            <div style="font-size:0.8rem;color:#aaa;margin-top:0.5rem;">首次約需 10～30 秒，請稍候</div>
+        </div>`;
     }
 
     try {
-        const res  = await fetch('fetch_orders.php', { cache: 'no-store' });
+        const url = forceRefresh ? 'fetch_orders.php?force=1' : 'fetch_orders.php';
+        const res  = await fetch(url, { cache: 'no-store' });
         const data = await res.json();
 
         if (!data.success) throw new Error(data.error || '伺服器回傳錯誤');
 
-        content.innerHTML = renderTable(data.groups);
+        content.innerHTML  = renderTable(data.groups);
         content.dataset.loaded = '1';
 
         document.getElementById('countText').textContent =
             `共 ${data.total_orders} 筆訂單（${data.total_groups} 組）`;
 
-        setStatus('success', `上次更新：${data.updated_at}`);
+        // ── 用後端 Unix timestamp 轉本地時間 ──
+        const timeStr = formatLocalTime(data.fetched_ts);
+
+        if (data.from_cache) {
+            const ageMin = Math.floor(data.cache_age / 60);
+            const ageSec = data.cache_age % 60;
+            const ageStr = ageMin > 0 ? `${ageMin}分${ageSec}秒前` : `${ageSec}秒前`;
+            setStatus('success', `資料擷取時間：${timeStr}`);
+            document.getElementById('cacheBadge').innerHTML =
+                `<span class="cache-badge">📦 快取 ${ageStr}</span>`;
+        } else {
+            setStatus('success', `資料擷取時間：${timeStr}`);
+            document.getElementById('cacheBadge').innerHTML = '';
+        }
+
+        // 從快取回傳時，倒數剩餘快取時間；否則從頭倒數
+        const remainSec = data.from_cache
+            ? Math.max(0, CACHE_TTL - data.cache_age)
+            : CACHE_TTL;
+        startCountdown(remainSec);
 
     } catch (err) {
         setStatus('error', '連線失敗');
         if (!content.dataset.loaded) {
             content.innerHTML = `<div class="error-box">❌ 讀取失敗：${escHtml(err.message)}<br>請按「立即同步」重試。</div>`;
         } else {
-            // 已有資料時，只在頂部短暫顯示錯誤
             const errDiv = document.createElement('div');
             errDiv.className = 'error-box';
             errDiv.style.marginBottom = '1rem';
-            errDiv.textContent = `⚠️ 自動更新失敗（${err.message}），下次將再試。`;
+            errDiv.textContent = `⚠️ 自動更新失敗（${err.message}），請按「立即同步」重試。`;
             content.prepend(errDiv);
-            setTimeout(() => errDiv.remove(), 5000);
+            setTimeout(() => errDiv.remove(), 6000);
         }
+        startCountdown(CACHE_TTL);
     } finally {
         document.getElementById('btnRefresh').disabled = false;
-        startCountdown();
     }
 }
 
-// ─── 狀態指示 ────────────────────────────────────────────
 function setStatus(type, text) {
-    const dot  = document.getElementById('statusDot');
-    const span = document.getElementById('statusText');
-    dot.className  = 'status-dot ' + type;
-    span.textContent = text;
+    document.getElementById('statusDot').className = 'status-dot ' + type;
+    document.getElementById('statusText').textContent = text;
 }
 
-// ─── 倒數計時（下次自動更新）────────────────────────────
-function startCountdown() {
-    let sec = AUTO_REFRESH_SEC;
+function startCountdown(sec) {
+    stopCountdown();
     const el = document.getElementById('countdown');
     el.textContent = `${sec}s 後自動更新`;
-
     countdownTimer = setInterval(() => {
         sec--;
-        el.textContent = `${sec}s 後自動更新`;
-        if (sec <= 0) {
-            stopCountdown();
-            fetchOrders();
-        }
+        el.textContent = sec > 0 ? `${sec}s 後自動更新` : '更新中...';
+        if (sec <= 0) { stopCountdown(); fetchOrders(); }
     }, 1000);
 }
 
@@ -563,41 +501,24 @@ function stopCountdown() {
     document.getElementById('countdown').textContent = '';
 }
 
-// ─── 摺疊 ────────────────────────────────────────────────
 function toggleGroup(groupId, btn) {
     const row = document.getElementById(groupId);
     if (!row) return;
-    const isHidden = row.style.display === 'none';
-    row.style.display = isHidden ? 'table-row' : 'none';
-    btn.textContent   = btn.textContent.replace(isHidden ? '▼' : '▲', isHidden ? '▲' : '▼');
+    const hidden = row.style.display === 'none';
+    row.style.display = hidden ? 'table-row' : 'none';
+    btn.textContent = btn.textContent.replace(hidden ? '▼':'▲', hidden ? '▲':'▼');
 }
 
-// ─── Modal ───────────────────────────────────────────────
 function openModal(mailId) {
     document.getElementById('modalContent').textContent = remarkStore[mailId] || '';
     document.getElementById('remarkModal').classList.add('active');
 }
-function closeModal() {
-    document.getElementById('remarkModal').classList.remove('active');
-}
-function closeModalOutside(e) {
-    if (e.target === document.getElementById('remarkModal')) closeModal();
-}
+function closeModal() { document.getElementById('remarkModal').classList.remove('active'); }
+function closeModalOutside(e) { if (e.target === document.getElementById('remarkModal')) closeModal(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-// ─── HTML 跳脫 ───────────────────────────────────────────
-function escHtml(str) {
-    if (str === null || str === undefined) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
-// ─── 啟動 ────────────────────────────────────────────────
-fetchOrders();
+// 啟動：不強制重抓，優先用快取
+fetchOrders(false);
 </script>
 </body>
 </html>
