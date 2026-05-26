@@ -1,28 +1,24 @@
 <?php
-require_once __DIR__ . '/vendor/autoload.php';
-
+// 只在本機有 .env 檔案時才載入（本機開發用）
 if (file_exists(__DIR__ . '/.env')) {
     require_once __DIR__ . '/vendor/autoload.php';
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
     $dotenv->load();
 }
 
-$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
-$dotenv->load();
-// mail_fetcher.php
-
+// 雲端環境（Render）直接從系統環境變數讀取，不需要 .env 檔案
 
 class MailFetcher {
     private $inbox;
     private $server;
-private $username;
-private $password;
+    private $username;
+    private $password;
 
-public function __construct() {
-    $this->server = $_ENV['MAIL_SERVER'];
-    $this->username = $_ENV['MAIL_USERNAME'];
-    $this->password = $_ENV['MAIL_PASSWORD'];
-}
+    public function __construct() {
+        $this->server   = $_ENV['MAIL_SERVER']   ?? getenv('MAIL_SERVER');
+        $this->username = $_ENV['MAIL_USERNAME']  ?? getenv('MAIL_USERNAME');
+        $this->password = $_ENV['MAIL_PASSWORD']  ?? getenv('MAIL_PASSWORD');
+    }
 
     public function fetchUnreadMails() {
         // 真實連接 Mail2000 信箱
