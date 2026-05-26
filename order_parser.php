@@ -422,11 +422,22 @@ class OrderParser {
             $data['customer_phone'] = self::findValueByLabel($xpath, '旅客電話');
             $data['remark']         = self::findValueByLabel($xpath, '特殊需求');
 
-            // ---- 房型名稱（訂購內容表格，background:#f2f2f2 的第一個資料列）----
-            $roomNodes = $xpath->query("//tr[td[contains(@style,'background-color:#f2f2f2')]]/td[1]/div");
-            if ($roomNodes->length > 0) {
-                $rt = trim($roomNodes->item(0)->nodeValue);
-                if ($rt) $data['room_type'] = $rt;
+            // ---- 房型名稱：訂購內容表格（e1f4ff 表頭後第一個 f2f2f2 資料列第一格）----
+            // 先找「房型名稱」表頭的 td，再取其所在 table 的下一個 tr 的第一個 td
+            $roomHeadNodes = $xpath->query("//td[contains(@style,'background-color:#e1f4ff')]/div[normalize-space(text())='房型名稱']");
+            if ($roomHeadNodes->length > 0) {
+                // 往上找到 tr，再找下一個 tr
+                $headTr = $roomHeadNodes->item(0)->parentNode->parentNode; // td -> tr
+                $nextTr = $headTr->nextSibling;
+                while ($nextTr && $nextTr->nodeType !== XML_ELEMENT_NODE) $nextTr = $nextTr->nextSibling;
+                if ($nextTr) {
+                    $firstTd = $nextTr->firstChild;
+                    while ($firstTd && $firstTd->nodeType !== XML_ELEMENT_NODE) $firstTd = $firstTd->nextSibling;
+                    if ($firstTd) {
+                        $rt = trim($firstTd->nodeValue);
+                        if ($rt && $rt !== '房型名稱') $data['room_type'] = $rt;
+                    }
+                }
             }
 
             // ---- 修改通知解析 ----

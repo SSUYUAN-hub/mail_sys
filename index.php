@@ -365,7 +365,7 @@ function buildMainRow(o, groupId, extraCount) {
         <td style="white-space:nowrap;min-width:110px;">${dateCell(o.check_in_roc, o.check_out_roc, origInRoc, origOutRoc, modFields)}</td>
         <td style="text-align:center;">${escHtml(o.nights)}</td>
         <td style="text-align:center;">${extraBed}</td>
-        <td style="font-size:0.8rem;">${roomType}</td>
+        <td style="min-width:130px;max-width:180px;"><div style="font-size:0.8rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all;line-height:1.4;">${roomType}</div></td>
         <td>${escHtml(o.customer_phone)}</td>
         <td>${amountCell}</td>
         <td>${remarkCell}</td>
@@ -425,7 +425,7 @@ function renderTable(groups) {
     let html = `<table><thead><tr>
         <th>信件ID</th><th>來源平台</th><th>OTA 訂單編號</th><th>旅客姓名</th>
         <th style="min-width:110px;">入住 / 退房日期</th>
-        <th style="min-width:50px;">天數</th><th>加床</th><th>房型</th>
+        <th style="min-width:50px;">天數</th><th>加床</th><th style="min-width:130px;">房型</th>
         <th>聯絡電話</th><th>總金額</th><th>客房備註 (特殊需求)</th>
     </tr></thead><tbody>`;
     groups.forEach(group => {

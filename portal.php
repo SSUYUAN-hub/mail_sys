@@ -84,7 +84,7 @@ $user = currentUser();
             box-shadow: 0 4px 20px rgba(100,33,0,0.1);
             padding: 2.5rem 2rem;
             text-align: center;
-            width: 220px;
+            width: 240px;
             cursor: pointer;
             text-decoration: none;
             color: inherit;
@@ -153,7 +153,7 @@ $user = currentUser();
             <div class="menu-label">帳號管理</div>
             <div class="menu-desc">
                 <?php if ($user['role'] === 'admin'): ?>
-                    審核帳號、管理所有<br>使用者帳號與權限
+                    審核、管理所有使用者帳號
                 <?php else: ?>
                     修改個人密碼
                 <?php endif; ?>
