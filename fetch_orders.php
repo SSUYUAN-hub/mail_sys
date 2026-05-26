@@ -27,6 +27,14 @@ if (!$forceRefresh
 require_once __DIR__ . '/mail_fetcher.php';
 require_once __DIR__ . '/order_parser.php';
 
+foreach ($unreadMails as $mail) {
+    echo '<hr><b>ID: ' . $mail['id'] . ' | 主旨: ' . htmlspecialchars($mail['subject']) . '</b>';
+    echo '<pre style="font-size:11px; background:#f0f0f0; padding:10px; overflow:auto;">';
+    echo htmlspecialchars($mail['html_body']);
+    echo '</pre>';
+}
+die();  
+
 function scoreOrder($order) {
     $score = 0;
     if ($order['customer_name']  !== '無' && $order['customer_name']  !== '請查後台') $score++;
@@ -43,13 +51,7 @@ try {
     $unreadMails = $fetcher->fetchUnreadMails();
 
  header('Content-Type: text/html; charset=utf-8');
-foreach ($unreadMails as $mail) {
-    echo '<hr><b>ID: ' . $mail['id'] . ' | 主旨: ' . htmlspecialchars($mail['subject']) . '</b>';
-    echo '<pre style="font-size:11px; background:#f0f0f0; padding:10px; overflow:auto;">';
-    echo htmlspecialchars($mail['html_body']);
-    echo '</pre>';
-}
-die();   
+ 
 
     $orders = [];
     foreach ($unreadMails as $mail) {
