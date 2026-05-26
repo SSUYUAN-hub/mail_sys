@@ -1,107 +1,184 @@
 <?php
 require_once __DIR__ . '/auth.php';
 requireLogin();
-
-// index.php
-require_once 'mail_fetcher.php';
-require_once 'order_parser.php';
-
-$fetcher = new MailFetcher();
-$unreadMails = $fetcher->fetchUnreadMails();
-
-// 解析所有信件並過濾
-$orders = [];
-foreach ($unreadMails as $mail) {
-    $order = OrderParser::parse($mail['html_body'], $mail['subject']);
-    if ($order['platform'] === '系統過濾信件') continue;
-    $order['mail_id'] = $mail['id'];
-    $orders[] = $order;
-}
-
-// 依 OTA 訂單號分組，同訂單號摺疊
-$groups = [];
-foreach ($orders as $order) {
-    $key = ($order['ota_number'] !== '無' && $order['ota_number'] !== '')
-        ? $order['ota_number']
-        : 'unique_' . $order['mail_id'];
-    $groups[$key][] = $order;
-}
-
-// 完整度評分：分數越高資訊越完整
-function scoreOrder($order) {
-    $score = 0;
-    if ($order['customer_name']  !== '無' && $order['customer_name']  !== '請查後台') $score++;
-    if ($order['check_in']       !== '無' && $order['check_in']       !== '請查後台') $score++;
-    if ($order['check_out']      !== '無' && $order['check_out']      !== '請查後台') $score++;
-    if ($order['owl_number']     !== '無')  $score++;
-    if ($order['amount']         > 0)       $score++;
-    if ($order['customer_phone'] !== '無')  $score++;
-    return $score;
-}
-
-// 每組按完整度降冪排列，第一筆當主列，其餘收折
-foreach ($groups as $ota_key => &$group) {
-    usort($group, fn($a, $b) => scoreOrder($b) - scoreOrder($a));
-}
-unset($group);
+$user = currentUser();
 ?>
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>羅東幸福商旅 - 自動訂房核對系統</title>
     <style>
-        html {
-            font-size: 125%;
-        }
+        html { font-size: 125%; }
+        *, *::before, *::after { box-sizing: border-box; }
         body {
             font-family: "Microsoft JhengHei", sans-serif;
             background-color: #f8f9fa;
             margin: 0;
-            padding: 20px;
+            padding: 0;
         }
+
+        /* Topbar */
+        .topbar {
+            background: #642100;
+            color: white;
+            padding: 0.75rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .topbar-left { display: flex; align-items: center; gap: 1rem; }
+        .topbar-title { font-size: 1rem; font-weight: bold; }
+        .btn-back {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 5px;
+            padding: 0.3rem 0.75rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: inherit;
+            text-decoration: none;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .btn-back:hover { background: rgba(255,255,255,0.28); }
+        .topbar-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; justify-content: flex-end; }
+        .topbar-user { font-size: 0.85rem; opacity: 0.9; }
+        .btn-logout {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 5px;
+            padding: 0.35rem 0.875rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: inherit;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .btn-logout:hover { background: rgba(255,255,255,0.28); }
+
+        /* 主容器 */
         .container {
             max-width: 1600px;
-            margin: 0 auto;
+            margin: 1.5rem auto;
             background: white;
-            padding: 25px;
+            padding: 1.5rem;
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-        .header {
+
+        /* 頁首列 */
+        .page-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 3px solid #642100;
-            padding-bottom: 15px;
-            margin-bottom: 20px;
+            padding-bottom: 1rem;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+            gap: 0.75rem;
         }
-        h1 { color: #642100; margin: 0; font-size: 1.5rem; }
+        .page-header h1 { color: #642100; margin: 0; font-size: 1.3rem; }
+        .header-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+        /* 狀態列 */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.82rem;
+            color: #666;
+        }
+        .status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #adb5bd;
+            flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        .status-dot.loading  { background: #f39c12; animation: pulse 1s infinite; }
+        .status-dot.success  { background: #27ae60; }
+        .status-dot.error    { background: #c0392b; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.3; }
+        }
+
+        /* 按鈕 */
         .btn-refresh {
-            background-color: #27ae60;
+            background: #27ae60;
             color: white;
             border: none;
-            padding: 0.6rem 1.25rem;
-            font-size: 1rem;
+            padding: 0.55rem 1.1rem;
+            font-size: 0.9rem;
             font-weight: bold;
             border-radius: 5px;
             cursor: pointer;
+            font-family: inherit;
+            transition: background 0.2s, opacity 0.2s;
+            white-space: nowrap;
         }
-        .btn-refresh:hover { background-color: #219653; }
+        .btn-refresh:hover:not(:disabled) { background: #219653; }
+        .btn-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* 倒數計時 */
+        .countdown {
+            font-size: 0.78rem;
+            color: #999;
+            white-space: nowrap;
+        }
+
+        /* Loading 遮罩 */
+        .loading-overlay {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #888;
+        }
+        .spinner {
+            display: inline-block;
+            width: 2.5rem; height: 2.5rem;
+            border: 4px solid #f0e0d6;
+            border-top-color: #642100;
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin-bottom: 1rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 錯誤訊息 */
+        .error-box {
+            background: #fde8e8;
+            border: 1px solid #f5b7b1;
+            border-radius: 6px;
+            padding: 1rem 1.25rem;
+            color: #c0392b;
+            font-size: 0.875rem;
+            margin: 1rem 0;
+        }
+
+        /* 統計列 */
+        .count-text { font-size: 0.9rem; color: #666; }
 
         /* 表格 */
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 0.625rem; }
         th, td { border: 1px solid #dee2e6; padding: 0.625rem; text-align: left; font-size: 0.875rem; }
         th {
-            background-color: #f1f3f5;
+            background: #f1f3f5;
             color: #495057;
             font-weight: bold;
             position: sticky;
-            top: 0;
+            top: 56px; /* topbar 高度 */
             z-index: 10;
             box-shadow: 0 2px 4px rgba(0,0,0,0.08);
         }
-        tr.main-row:hover { background-color: #fdf6f0; }
+        tr.main-row:hover { background: #fdf6f0; }
 
         /* Badge */
         .badge {
@@ -112,14 +189,14 @@ unset($group);
             color: white;
             white-space: nowrap;
         }
-        .bg-booking  { background-color: #003580; }
-        .bg-agoda    { background-color: #e12d6e; }
-        .bg-trip     { background-color: #ff9900; }
-        .bg-airbnb   { background-color: #FF385C; }
-        .bg-asiayo   { background-color: #97af15; }
-        .bg-expedia  { background-color: #00A8E0; }
-        .bg-cancelled { background-color: #c0392b; }
-        .bg-unknown  { background-color: #6c757d; }
+        .bg-booking   { background: #003580; }
+        .bg-agoda     { background: #e12d6e; }
+        .bg-trip      { background: #ff9900; }
+        .bg-airbnb    { background: #FF385C; }
+        .bg-asiayo    { background: #97af15; }
+        .bg-expedia   { background: #00A8E0; }
+        .bg-cancelled { background: #c0392b; }
+        .bg-unknown   { background: #6c757d; }
 
         /* 備註按鈕 */
         .btn-remark {
@@ -131,11 +208,12 @@ unset($group);
             cursor: pointer;
             color: #856404;
             white-space: nowrap;
+            font-family: inherit;
         }
         .btn-remark:hover { background: #ffe69c; }
 
         /* 摺疊行 */
-        .collapse-row { background-color: #f8f9ff; }
+        .collapse-row { background: #f8f9ff; }
         .collapse-row td { padding: 0.375rem 0.625rem; font-size: 0.8125rem; color: #555; }
         .btn-expand {
             background: none;
@@ -145,15 +223,17 @@ unset($group);
             font-size: 0.6875rem;
             cursor: pointer;
             color: #495057;
+            font-family: inherit;
         }
         .btn-expand:hover { background: #e9ecef; }
+
+        .remark-short { color: #c0392b; font-size: 0.8125rem; }
 
         /* Modal */
         .modal-overlay {
             display: none;
             position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            inset: 0;
             background: rgba(0,0,0,0.5);
             z-index: 1000;
             justify-content: center;
@@ -163,7 +243,7 @@ unset($group);
         .modal-box {
             background: white;
             border-radius: 8px;
-            padding: 24px;
+            padding: 1.5rem;
             max-width: 560px;
             width: 90%;
             max-height: 80vh;
@@ -175,8 +255,8 @@ unset($group);
             font-size: 1rem;
             font-weight: bold;
             color: #642100;
-            margin-bottom: 16px;
-            padding-bottom: 10px;
+            margin-bottom: 1rem;
+            padding-bottom: 0.625rem;
             border-bottom: 2px solid #f0e0d6;
         }
         .modal-content {
@@ -188,30 +268,191 @@ unset($group);
         }
         .modal-close {
             position: absolute;
-            top: 12px; right: 16px;
-            background: none;
-            border: none;
-            font-size: 1.375rem;
-            cursor: pointer;
-            color: #888;
-            line-height: 1;
+            top: 0.75rem; right: 1rem;
+            background: none; border: none;
+            font-size: 1.375rem; cursor: pointer; color: #888;
         }
         .modal-close:hover { color: #333; }
-
-        .count-text { font-size: 1rem; color: #666; }
-        .remark-short { color: #c0392b; font-size: 0.8125rem; }
     </style>
 </head>
 <body>
+
+<!-- Topbar -->
+<div class="topbar">
+    <div class="topbar-left">
+        <a href="portal.php" class="btn-back">← 返回主選單</a>
+        <span class="topbar-title">🏨 羅東幸福商旅 - 訂房核對平台</span>
+    </div>
+    <div class="topbar-right">
+        <span class="topbar-user">👤 <?php echo htmlspecialchars($user['username']); ?></span>
+        <a href="logout.php" class="btn-logout">登出</a>
+    </div>
+</div>
+
 <div class="container">
-    <div class="header">
+    <div class="page-header">
         <div>
-            <h1>🏨 羅東幸福商旅 - 訂房信件自動核對平台</h1>
-            <div class="count-text">共 <b><?php echo count($orders); ?></b> 筆訂單（<b><?php echo count($groups); ?></b> 組）</div>
+            <h1>📬 訂房信件自動核對</h1>
+            <div class="count-text" id="countText">正在載入...</div>
         </div>
-        <button class="btn-refresh" onclick="window.location.reload();">🔄 立即同步最新信件</button>
+        <div class="header-right">
+            <div class="status-bar">
+                <div class="status-dot loading" id="statusDot"></div>
+                <span id="statusText">連線中...</span>
+            </div>
+            <span class="countdown" id="countdown"></span>
+            <button class="btn-refresh" id="btnRefresh" onclick="fetchOrders(true)">
+                🔄 立即同步
+            </button>
+        </div>
     </div>
 
+    <!-- 內容區 -->
+    <div id="mainContent">
+        <div class="loading-overlay">
+            <div class="spinner"></div>
+            <div>正在連接信箱，讀取最新信件...</div>
+            <div style="font-size:0.8rem;color:#aaa;margin-top:0.5rem;">首次載入需要 10～30 秒，請稍候</div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 彈窗 -->
+<div class="modal-overlay" id="remarkModal" onclick="closeModalOutside(event)">
+    <div class="modal-box">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-title">📋 客房備註 / 特殊需求</div>
+        <div class="modal-content" id="modalContent"></div>
+    </div>
+</div>
+
+<script>
+// ─── 全域狀態 ───────────────────────────────────────────
+let remarkStore   = {};   // mailId → 備註文字
+let countdownTimer = null;
+let autoRefreshTimer = null;
+const AUTO_REFRESH_SEC = 180; // 每 3 分鐘自動重抓
+
+// ─── Badge class 對應 ────────────────────────────────────
+function getBadgeClass(platform) {
+    if (platform.includes('AsiaYo'))  return 'bg-asiayo';
+    if (platform.includes('Expedia')) return 'bg-expedia';
+    if (platform.includes('Airbnb'))  return 'bg-airbnb';
+    if (platform.includes('Booking')) return 'bg-booking';
+    if (platform.includes('Agoda'))   return 'bg-agoda';
+    if (platform.includes('Trip'))    return 'bg-trip';
+    if (platform.includes('取消'))    return 'bg-cancelled';
+    return 'bg-unknown';
+}
+
+// ─── 建立主列 HTML ───────────────────────────────────────
+function buildMainRow(order, groupId, extraCount) {
+    const badge = getBadgeClass(order.platform);
+    const isTrip = order.platform.includes('Trip');
+    const remark = order.remark || '無';
+    const hasLongRemark = isTrip && remark.length > 30;
+
+    if (hasLongRemark) {
+        remarkStore[order.mail_id] = remark;
+    }
+
+    const expandBtn = extraCount > 0
+        ? `<br><button class="btn-expand" onclick="toggleGroup('${groupId}', this)">+${extraCount} 封 ▼</button>`
+        : '';
+
+    const extraBed = (order.extra_bed && order.extra_bed !== '無' && order.extra_bed !== '')
+        ? `<span style="color:#e67e22;font-weight:bold;">🛏 ${escHtml(order.extra_bed)}</span>`
+        : `<span style="color:#aaa;">—</span>`;
+
+    const remarkCell = hasLongRemark
+        ? `<button class="btn-remark" onclick="openModal(${order.mail_id})">📋 查看備註</button>`
+        : `<div class="remark-short">${escHtml(remark)}</div>`;
+
+    return `
+    <tr class="main-row">
+        <td>${escHtml(String(order.mail_id))}${expandBtn}</td>
+        <td><span class="badge ${badge}">${escHtml(order.platform)}</span></td>
+        <td><b>${escHtml(order.customer_name)}</b></td>
+        <td style="white-space:nowrap;min-width:110px;">
+            <span style="color:#087abc;font-weight:bold;">${escHtml(order.check_in_roc)}</span><br>
+            <span style="color:#888;font-size:0.75rem;">至</span>&nbsp;${escHtml(order.check_out_roc)}
+        </td>
+        <td style="text-align:center;">${escHtml(order.nights)}</td>
+        <td style="text-align:center;">${extraBed}</td>
+        <td><code>${escHtml(order.ota_number)}</code></td>
+        <td><small>${escHtml(order.owl_number)}</small></td>
+        <td>${escHtml(order.customer_phone)}</td>
+        <td><b style="color:#27ae60;">TWD ${Number(order.amount).toLocaleString()}</b></td>
+        <td>${remarkCell}</td>
+    </tr>`;
+}
+
+// ─── 建立摺疊子列 HTML ──────────────────────────────────
+function buildCollapseRow(extras, groupId) {
+    if (!extras.length) return '';
+
+    const rows = extras.map(ex => {
+        const badge  = getBadgeClass(ex.platform);
+        const isTrip = ex.platform.includes('Trip');
+        const remark = ex.remark || '無';
+        const hasLong = isTrip && remark.length > 30;
+        if (hasLong) remarkStore[ex.mail_id] = remark;
+
+        const extraBed = (ex.extra_bed && ex.extra_bed !== '無' && ex.extra_bed !== '')
+            ? `<span style="color:#e67e22;font-weight:bold;">🛏 ${escHtml(ex.extra_bed)}</span>`
+            : `<span style="color:#aaa;">—</span>`;
+
+        const remarkCell = hasLong
+            ? `<button class="btn-remark" onclick="openModal(${ex.mail_id})">📋 查看備註</button>`
+            : `<span class="remark-short">${escHtml(remark)}</span>`;
+
+        return `
+        <tr>
+            <td style="border:none;font-size:0.75rem;">${escHtml(String(ex.mail_id))}</td>
+            <td style="border:none;font-size:0.75rem;"><span class="badge ${badge}">${escHtml(ex.platform)}</span></td>
+            <td style="border:none;font-size:0.75rem;">${escHtml(ex.customer_name)}</td>
+            <td style="border:none;font-size:0.75rem;white-space:nowrap;">
+                <span style="color:#087abc;">${escHtml(ex.check_in_roc)}</span>
+                →&nbsp;${escHtml(ex.check_out_roc)}
+            </td>
+            <td style="border:none;font-size:0.75rem;text-align:center;">${escHtml(ex.nights)}</td>
+            <td style="border:none;font-size:0.75rem;text-align:center;">${extraBed}</td>
+            <td style="border:none;font-size:0.75rem;color:#27ae60;">TWD ${Number(ex.amount).toLocaleString()}</td>
+            <td style="border:none;font-size:0.75rem;">${remarkCell}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+    <tr class="collapse-row" id="${groupId}" style="display:none;">
+        <td colspan="11">
+            <table style="width:100%;border:none;margin:0;background:transparent;">
+                <thead>
+                    <tr style="background:#e8eaf6;">
+                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">信件ID</th>
+                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">平台</th>
+                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">旅客</th>
+                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">日期</th>
+                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">天數</th>
+                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">加床</th>
+                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">金額</th>
+                        <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">備註</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </td>
+    </tr>`;
+}
+
+// ─── 渲染整個表格 ────────────────────────────────────────
+function renderTable(groups) {
+    remarkStore = {};
+
+    if (!groups.length) {
+        return `<p style="text-align:center;color:#999;padding:3rem 0;">🎉 太棒了！目前沒有未處理的訂房信件。</p>`;
+    }
+
+    let tableHtml = `
     <table>
         <thead>
             <tr>
@@ -228,180 +469,135 @@ unset($group);
                 <th>客房備註 (特殊需求)</th>
             </tr>
         </thead>
-        <tbody>
-        <?php if (empty($groups)): ?>
-            <tr>
-                <td colspan="11" style="text-align:center;color:#999;">🎉 太棒了！目前沒有未處理的訂房信件。</td>
-            </tr>
-        <?php else: ?>
-            <?php foreach ($groups as $ota_key => $group):
-                $main   = $group[0];
-                $extras = array_slice($group, 1);
-                $count  = count($group);
+        <tbody>`;
 
-                // badge
-                $badgeClass   = 'bg-unknown';
-                $platformName = $main['platform'];
-                if      (strpos($platformName, 'AsiaYo')  !== false) $badgeClass = 'bg-asiayo';
-                elseif  (strpos($platformName, 'Expedia') !== false) $badgeClass = 'bg-expedia';
-                elseif  (strpos($platformName, 'Airbnb')  !== false) $badgeClass = 'bg-airbnb';
-                elseif  (strpos($platformName, 'Booking') !== false) $badgeClass = 'bg-booking';
-                elseif  (strpos($platformName, 'Agoda')   !== false) $badgeClass = 'bg-agoda';
-                elseif  (strpos($platformName, 'Trip')    !== false) $badgeClass = 'bg-trip';
-                if      (strpos($platformName, '(取消)')  !== false) $badgeClass = 'bg-cancelled';
+    groups.forEach(group => {
+        const main    = group[0];
+        const extras  = group.slice(1);
+        const groupId = 'g_' + main.mail_id;
 
-                $isTrip  = strpos($platformName, 'Trip') !== false;
-                $remark  = htmlspecialchars($main['remark']);
-                $groupId = 'g_' . $main['mail_id'];
-            ?>
-            <!-- 主列 -->
-            <tr class="main-row">
-                <td>
-                    <?php echo $main['mail_id']; ?>
-                    <?php if ($count > 1): ?>
-                        <br>
-                        <button class="btn-expand" onclick="toggleGroup('<?php echo $groupId; ?>', this)">
-                            +<?php echo $count - 1; ?> 封 ▼
-                        </button>
-                    <?php endif; ?>
-                </td>
-                <td><span class="badge <?php echo $badgeClass; ?>"><?php echo htmlspecialchars($platformName); ?></span></td>
-                <td><b><?php echo htmlspecialchars($main['customer_name']); ?></b></td>
-                <td style="white-space:nowrap;min-width:110px;">
-                    <span style="color:#087abc;font-weight:bold;"><?php echo htmlspecialchars(OrderParser::toROCDate($main['check_in'])); ?></span><br>
-                    <span style="color:#888;font-size:0.75rem;">至</span>&nbsp;<?php echo htmlspecialchars(OrderParser::toROCDate($main['check_out'])); ?>
-                </td>
-                <td style="text-align:center;"><?php echo htmlspecialchars($main['nights']); ?></td>
-                <td style="text-align:center;">
-                    <?php if ($main['extra_bed'] !== '無' && $main['extra_bed'] !== ''): ?>
-                        <span style="color:#e67e22;font-weight:bold;">🛏 <?php echo htmlspecialchars($main['extra_bed']); ?></span>
-                    <?php else: ?>
-                        <span style="color:#aaa;">—</span>
-                    <?php endif; ?>
-                </td>
-                <td><code><?php echo htmlspecialchars($main['ota_number']); ?></code></td>
-                <td><small><?php echo htmlspecialchars($main['owl_number']); ?></small></td>
-                <td><?php echo htmlspecialchars($main['customer_phone']); ?></td>
-                <td><b style="color:#27ae60;">TWD <?php echo number_format($main['amount']); ?></b></td>
-                <td>
-                    <?php if ($isTrip && strlen($main['remark']) > 30): ?>
-                        <button class="btn-remark" onclick="openModal(<?php echo $main['mail_id']; ?>)">
-                            📋 查看備註
-                        </button>
-                        <span id="remark_<?php echo $main['mail_id']; ?>" style="display:none;"><?php echo $remark; ?></span>
-                    <?php else: ?>
-                        <div class="remark-short"><?php echo $remark; ?></div>
-                    <?php endif; ?>
-                </td>
-            </tr>
+        tableHtml += buildMainRow(main, groupId, extras.length);
+        tableHtml += buildCollapseRow(extras, groupId);
+    });
 
-            <?php if ($count > 1): ?>
-            <!-- 摺疊的同訂單號其他封 -->
-            <tr class="collapse-row" id="<?php echo $groupId; ?>" style="display:none;">
-                <td colspan="11">
-                    <table style="width:100%;border:none;margin:0;background:transparent;">
-                        <thead>
-                            <tr style="background:#e8eaf6;">
-                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">信件ID</th>
-                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">平台</th>
-                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">旅客</th>
-                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">日期</th>
-                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">天數</th>
-                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">加床</th>
-                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">金額</th>
-                                <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">備註</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ($extras as $ex):
-                            $exIsTrip = strpos($ex['platform'], 'Trip') !== false;
-                            $exRemark = htmlspecialchars($ex['remark']);
-                            $exBadge  = 'bg-unknown';
-                            if      (strpos($ex['platform'], 'AsiaYo')  !== false) $exBadge = 'bg-asiayo';
-                            elseif  (strpos($ex['platform'], 'Expedia') !== false) $exBadge = 'bg-expedia';
-                            elseif  (strpos($ex['platform'], 'Airbnb')  !== false) $exBadge = 'bg-airbnb';
-                            elseif  (strpos($ex['platform'], 'Booking') !== false) $exBadge = 'bg-booking';
-                            elseif  (strpos($ex['platform'], 'Agoda')   !== false) $exBadge = 'bg-agoda';
-                            elseif  (strpos($ex['platform'], 'Trip')    !== false) $exBadge = 'bg-trip';
-                            if      (strpos($ex['platform'], '(取消)')  !== false) $exBadge = 'bg-cancelled';
-                        ?>
-                        <tr>
-                            <td style="border:none;font-size:0.75rem;"><?php echo $ex['mail_id']; ?></td>
-                            <td style="border:none;font-size:0.75rem;"><span class="badge <?php echo $exBadge; ?>"><?php echo htmlspecialchars($ex['platform']); ?></span></td>
-                            <td style="border:none;font-size:0.75rem;"><?php echo htmlspecialchars($ex['customer_name']); ?></td>
-                            <td style="border:none;font-size:0.75rem;white-space:nowrap;">
-                                <span style="color:#087abc;"><?php echo htmlspecialchars(OrderParser::toROCDate($ex['check_in'])); ?></span>
-                                →&nbsp;<?php echo htmlspecialchars(OrderParser::toROCDate($ex['check_out'])); ?>
-                            </td>
-                            <td style="border:none;font-size:0.75rem;text-align:center;"><?php echo htmlspecialchars($ex['nights']); ?></td>
-                            <td style="border:none;font-size:0.75rem;text-align:center;">
-                                <?php if ($ex['extra_bed'] !== '無' && $ex['extra_bed'] !== ''): ?>
-                                    <span style="color:#e67e22;font-weight:bold;">🛏 <?php echo htmlspecialchars($ex['extra_bed']); ?></span>
-                                <?php else: ?>
-                                    <span style="color:#aaa;">—</span>
-                                <?php endif; ?>
-                            </td>
-                            <td style="border:none;font-size:0.75rem;color:#27ae60;">TWD <?php echo number_format($ex['amount']); ?></td>
-                            <td style="border:none;font-size:0.75rem;">
-                                <?php if ($exIsTrip && strlen($ex['remark']) > 30): ?>
-                                    <button class="btn-remark" onclick="openModal(<?php echo $ex['mail_id']; ?>)">📋 查看備註</button>
-                                    <span id="remark_<?php echo $ex['mail_id']; ?>" style="display:none;"><?php echo $exRemark; ?></span>
-                                <?php else: ?>
-                                    <span class="remark-short"><?php echo $exRemark; ?></span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </td>
-            </tr>
-            <?php endif; ?>
+    tableHtml += `</tbody></table>`;
+    return tableHtml;
+}
 
-            <?php endforeach; ?>
-        <?php endif; ?>
-        </tbody>
-    </table>
-</div>
+// ─── 主要抓取函式 ────────────────────────────────────────
+async function fetchOrders(manual = false) {
+    setStatus('loading', manual ? '同步中...' : '更新中...');
+    document.getElementById('btnRefresh').disabled = true;
+    stopCountdown();
 
-<!-- Modal 彈窗 -->
-<div class="modal-overlay" id="remarkModal" onclick="closeModalOutside(event)">
-    <div class="modal-box">
-        <button class="modal-close" onclick="closeModal()">✕</button>
-        <div class="modal-title">📋 客房備註 / 特殊需求</div>
-        <div class="modal-content" id="modalContent"></div>
-    </div>
-</div>
+    // 第一次載入時才顯示 spinner（之後靜默更新，不蓋掉現有內容）
+    const content = document.getElementById('mainContent');
+    if (!content.dataset.loaded) {
+        content.innerHTML = `
+            <div class="loading-overlay">
+                <div class="spinner"></div>
+                <div>正在連接信箱，讀取最新信件...</div>
+                <div style="font-size:0.8rem;color:#aaa;margin-top:0.5rem;">首次載入需要 10～30 秒，請稍候</div>
+            </div>`;
+    }
 
-<script>
-function toggleGroup(groupId, btn) {
-    const row = document.getElementById(groupId);
-    if (row.style.display === 'none') {
-        row.style.display = 'table-row';
-        btn.textContent = btn.textContent.replace('▼', '▲');
-    } else {
-        row.style.display = 'none';
-        btn.textContent = btn.textContent.replace('▲', '▼');
+    try {
+        const res  = await fetch('fetch_orders.php', { cache: 'no-store' });
+        const data = await res.json();
+
+        if (!data.success) throw new Error(data.error || '伺服器回傳錯誤');
+
+        content.innerHTML = renderTable(data.groups);
+        content.dataset.loaded = '1';
+
+        document.getElementById('countText').textContent =
+            `共 ${data.total_orders} 筆訂單（${data.total_groups} 組）`;
+
+        setStatus('success', `上次更新：${data.updated_at}`);
+
+    } catch (err) {
+        setStatus('error', '連線失敗');
+        if (!content.dataset.loaded) {
+            content.innerHTML = `<div class="error-box">❌ 讀取失敗：${escHtml(err.message)}<br>請按「立即同步」重試。</div>`;
+        } else {
+            // 已有資料時，只在頂部短暫顯示錯誤
+            const errDiv = document.createElement('div');
+            errDiv.className = 'error-box';
+            errDiv.style.marginBottom = '1rem';
+            errDiv.textContent = `⚠️ 自動更新失敗（${err.message}），下次將再試。`;
+            content.prepend(errDiv);
+            setTimeout(() => errDiv.remove(), 5000);
+        }
+    } finally {
+        document.getElementById('btnRefresh').disabled = false;
+        startCountdown();
     }
 }
 
-function openModal(mailId) {
-    const remark = document.getElementById('remark_' + mailId).textContent;
-    document.getElementById('modalContent').textContent = remark;
-    document.getElementById('remarkModal').classList.add('active');
+// ─── 狀態指示 ────────────────────────────────────────────
+function setStatus(type, text) {
+    const dot  = document.getElementById('statusDot');
+    const span = document.getElementById('statusText');
+    dot.className  = 'status-dot ' + type;
+    span.textContent = text;
 }
 
+// ─── 倒數計時（下次自動更新）────────────────────────────
+function startCountdown() {
+    let sec = AUTO_REFRESH_SEC;
+    const el = document.getElementById('countdown');
+    el.textContent = `${sec}s 後自動更新`;
+
+    countdownTimer = setInterval(() => {
+        sec--;
+        el.textContent = `${sec}s 後自動更新`;
+        if (sec <= 0) {
+            stopCountdown();
+            fetchOrders();
+        }
+    }, 1000);
+}
+
+function stopCountdown() {
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    document.getElementById('countdown').textContent = '';
+}
+
+// ─── 摺疊 ────────────────────────────────────────────────
+function toggleGroup(groupId, btn) {
+    const row = document.getElementById(groupId);
+    if (!row) return;
+    const isHidden = row.style.display === 'none';
+    row.style.display = isHidden ? 'table-row' : 'none';
+    btn.textContent   = btn.textContent.replace(isHidden ? '▼' : '▲', isHidden ? '▲' : '▼');
+}
+
+// ─── Modal ───────────────────────────────────────────────
+function openModal(mailId) {
+    document.getElementById('modalContent').textContent = remarkStore[mailId] || '';
+    document.getElementById('remarkModal').classList.add('active');
+}
 function closeModal() {
     document.getElementById('remarkModal').classList.remove('active');
 }
-
 function closeModalOutside(e) {
     if (e.target === document.getElementById('remarkModal')) closeModal();
 }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeModal();
-});
+// ─── HTML 跳脫 ───────────────────────────────────────────
+function escHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// ─── 啟動 ────────────────────────────────────────────────
+fetchOrders();
 </script>
 </body>
 </html>
