@@ -27,13 +27,17 @@ if (!$forceRefresh
 require_once __DIR__ . '/mail_fetcher.php';
 require_once __DIR__ . '/order_parser.php';
 
+header('Content-Type: text/html; charset=utf-8');
+$fetcher = new MailFetcher();
+$unreadMails = $fetcher->fetchUnreadMails();
+
 foreach ($unreadMails as $mail) {
     echo '<hr><b>ID: ' . $mail['id'] . ' | 主旨: ' . htmlspecialchars($mail['subject']) . '</b>';
     echo '<pre style="font-size:11px; background:#f0f0f0; padding:10px; overflow:auto;">';
     echo htmlspecialchars($mail['html_body']);
     echo '</pre>';
 }
-die();  
+die();
 
 function scoreOrder($order) {
     $score = 0;
