@@ -15,6 +15,17 @@ class MailFetcher {
         // 真實連接 Mail2000 信箱
         $this->inbox = imap_open($this->server, $this->username, $this->password) 
             or die('無法連接至 Mail2000: ' . imap_last_error());
+
+
+            // 加這段 ↓↓↓
+foreach ($unreadMails as $mail) {
+    echo '<hr><b>ID: ' . $mail['id'] . ' | 主旨: ' . htmlspecialchars($mail['subject']) . '</b>';
+    echo '<pre style="font-size:11px; background:#f0f0f0; padding:10px; overflow:auto;">';
+    echo htmlspecialchars($mail['html_body']);
+    echo '</pre>';
+}
+die(); // 先停在這，只看原始碼
+// 加這段 ↑↑↑
         // 搜尋未讀信件 (UNSEEN)
         $since = date('d-M-Y', strtotime('-30 days'));
 $emails = imap_search($this->inbox, "SINCE \"{$since}\"");
