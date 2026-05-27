@@ -37,14 +37,8 @@ class MailFetcher {
             // 取出 INBOX/ 後面的部分作為主信件匣名稱
             $imapName = substr($relative, strlen('INBOX/'));
 
-            // 用 imap_utf8 解碼（PHP IMAP 內建，正確處理 Modified UTF-7）
-            $displayName = imap_utf8($imapName);
-
-            // 若解碼結果仍含 & 符號（部分環境 imap_utf8 不處理資料夾名稱），
-            // 改用手動解碼
-            if (mb_strpos($displayName, '&') !== false) {
-                $displayName = self::decodeModifiedUtf7($imapName);
-            }
+            // 直接使用手動解碼 Modified UTF-7（imap_utf8 不適用於資料夾名稱）
+            $displayName = self::decodeModifiedUtf7($imapName);
 
             $result[] = [
                 'imap_name'    => $imapName,
