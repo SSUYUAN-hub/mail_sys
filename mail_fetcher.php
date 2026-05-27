@@ -37,8 +37,14 @@ class MailFetcher {
             // 取出 INBOX/ 後面的部分作為主信件匣名稱
             $imapName = substr($relative, strlen('INBOX/'));
 
-            // UTF-7 解碼供顯示
-            $displayName = mb_convert_encoding($imapName, 'UTF-8', 'UTF7-IMAP');
+            // 用 imap_utf8 解碼（PHP IMAP 內建，正確處理 Modified UTF-7）
+            $displayName = imap_utf8($imapName);
+
+            // 若解碼結果仍含 & 符號（部分環境 imap_utf8 不處理資料夾名稱），
+            // 改用手動解碼
+            if (mb_strpos($displayName, '&') !== false) {
+                $displayName = self::decodeModifiedUtf7($imapName);
+            }
 
             $result[] = [
                 'imap_name'    => $imapName,
@@ -50,6 +56,25 @@ class MailFetcher {
         usort($result, fn($a, $b) => strcmp($a['display_name'], $b['display_name']));
 
         return $result;
+    }
+
+    /**
+     * 手動解碼 IMAP Modified UTF-7 資料夾名稱
+     * 格式：&<base64>- 代表一段非 ASCII 字元，其餘為純 ASCII
+     */
+    private static function decodeModifiedUtf7(string $str): string {
+        return preg_replace_callback(
+            '/&([^-]*)-/',
+            function ($matches) {
+                if ($matches[1] === '') return '&'; // &- 是跳脫的 &
+                // Modified UTF-7 用 , 取代 /，先還原再 base64 解碼
+                $base64  = str_replace(',', '/', $matches[1]);
+                $decoded = base64_decode($base64);
+                // 結果為 UTF-16BE，轉換成 UTF-8
+                return mb_convert_encoding($decoded, 'UTF-8', 'UTF-16BE');
+            },
+            $str
+        );
     }
 
     public function fetchUnreadMails(): array {
