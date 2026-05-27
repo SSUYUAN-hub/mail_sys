@@ -176,8 +176,21 @@ $user = currentUser();
         .bg-cancelled { background: #c0392b; }
         .bg-unknown   { background: #6c757d; }
 
-        .btn-remark {
-            background: #fff3cd;
+        .btn-archive {
+            background: #e8f5e9;
+            border: 1px solid #27ae60;
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            color: #1e8449;
+            white-space: nowrap;
+            font-family: inherit;
+            transition: background 0.2s, opacity 0.2s;
+        }
+        .btn-archive:hover:not(:disabled) { background: #c8e6c9; }
+        .btn-archive:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-remark {            background: #fff3cd;
             border: 1px solid #ffc107;
             border-radius: 4px;
             padding: 0.25rem 0.625rem;
@@ -369,6 +382,12 @@ function buildMainRow(o, groupId, extraCount) {
         <td>${escHtml(o.customer_phone)}</td>
         <td>${amountCell}</td>
         <td>${remarkCell}</td>
+        <td style="text-align:center;">
+            ${o.platform !== '系統過濾信件'
+                ? `<button class="btn-archive" onclick="archiveMail(${o.mail_id}, '${escHtml(o.platform)}', this)">📂 歸檔</button>`
+                : `<span style="color:#aaa;font-size:0.75rem;">—</span>`
+            }
+        </td>
     </tr>`;
 }
 
@@ -400,7 +419,7 @@ function buildCollapseRow(extras, groupId) {
         </tr>`;
     }).join('');
 
-    return `<tr class="collapse-row" id="${groupId}" style="display:none;"><td colspan="11">
+    return `<tr class="collapse-row" id="${groupId}" style="display:none;"><td colspan="12">
         <table style="width:100%;border:none;margin:0;background:transparent;">
             <thead><tr style="background:#e8eaf6;">
                 <th style="border:none;font-size:0.75rem;position:static;box-shadow:none;">信件ID</th>
@@ -427,6 +446,7 @@ function renderTable(groups) {
         <th style="min-width:110px;">入住 / 退房日期</th>
         <th style="min-width:50px;">天數</th><th>加床</th><th style="min-width:130px;">房型</th>
         <th>聯絡電話</th><th>總金額</th><th>客房備註 (特殊需求)</th>
+        <th style="min-width:70px;text-align:center;">歸檔</th>
     </tr></thead><tbody>`;
     groups.forEach(group => {
         const main    = group[0];
@@ -543,6 +563,47 @@ function toggleGroup(groupId, btn) {
     const hidden = row.style.display === 'none';
     row.style.display = hidden ? 'table-row' : 'none';
     btn.textContent = btn.textContent.replace(hidden ? '▼':'▲', hidden ? '▲':'▼');
+}
+
+// ── 歸檔函式 ────────────────────────────────────────────────
+async function archiveMail(mailId, platform, btn) {
+    btn.disabled = true;
+    btn.textContent = '歸檔中...';
+
+    try {
+        const body = new URLSearchParams({ mail_id: mailId, platform });
+        const res  = await fetch('archive_mail.php', { method: 'POST', body });
+        const data = await res.json();
+
+        if (!data.success) throw new Error(data.error || '歸檔失敗');
+
+        // 移除整個 group（主列 + collapse列）
+        const tr = btn.closest('tr');
+        const groupId = tr.querySelector('button.btn-expand')
+            ? tr.querySelector('button.btn-expand').getAttribute('onclick').match(/'([^']+)'/)?.[1]
+            : null;
+        if (groupId) {
+            const collapseRow = document.getElementById(groupId);
+            if (collapseRow) collapseRow.remove();
+        }
+        tr.remove();
+
+        // 更新計數
+        const countEl = document.getElementById('countText');
+        if (countEl) {
+            const match = countEl.textContent.match(/共\s*(\d+)\s*筆.*?（(\d+)\s*組）/);
+            if (match) {
+                const newOrders = Math.max(0, parseInt(match[1]) - 1);
+                const newGroups = Math.max(0, parseInt(match[2]) - 1);
+                countEl.textContent = `共 ${newOrders} 筆訂單（${newGroups} 組）`;
+            }
+        }
+
+    } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '📂 歸檔';
+        alert('⚠️ ' + err.message);
+    }
 }
 
 function openModal(mailId) {

@@ -11,45 +11,76 @@ class MailFetcher {
         $this->password = getenv('MAIL_PASSWORD');
     }
 
-    public function fetchUnreadMails() {
-    // 先印出環境變數確認
-    // echo 'SERVER: ' . $this->server . '<br>';
-    // echo 'USER: ' . $this->username . '<br>';
-    // echo 'PASS: ' . (empty($this->password) ? '❌ 空的' : '✅ 有值') . '<br>';
+    /**
+     * 偵測 INBOX 下的第一層子信件匣清單
+     * 回傳陣列，每筆包含：
+     *   - imap_name   : 原始 IMAP 名稱（含 UTF-7 編碼，存入 DB 用）
+     *   - display_name: 解碼後的可讀名稱（顯示用）
+     */
+    public function fetchMainMailboxes(): array {
+        $conn = imap_open($this->server, $this->username, $this->password);
+        if (!$conn) {
+            throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
+        }
 
-    $this->inbox = imap_open($this->server, $this->username, $this->password);
-    if (!$this->inbox) {
-        die('❌ IMAP 連線失敗: ' . imap_last_error());
+        // % 只取第一層，不遞迴進子資料夾
+        $raw = imap_list($conn, $this->server, 'INBOX/%');
+        imap_close($conn);
+
+        if (!$raw) return [];
+
+        $result = [];
+        foreach ($raw as $fullPath) {
+            // 去掉 server prefix，只保留 INBOX/xxx 部分
+            $relative = str_replace($this->server, '', $fullPath);
+
+            // 取出 INBOX/ 後面的部分作為主信件匣名稱
+            $imapName = substr($relative, strlen('INBOX/'));
+
+            // UTF-7 解碼供顯示
+            $displayName = mb_convert_encoding($imapName, 'UTF-8', 'UTF7-IMAP');
+
+            $result[] = [
+                'imap_name'    => $imapName,
+                'display_name' => $displayName,
+            ];
+        }
+
+        // 依顯示名稱排序
+        usort($result, fn($a, $b) => strcmp($a['display_name'], $b['display_name']));
+
+        return $result;
     }
 
-            
-        // 搜尋未讀信件 (UNSEEN)
-        $since = date('d-M-Y', strtotime('-30 days'));
-$emails = imap_search($this->inbox, "SINCE \"{$since}\"");
+    public function fetchUnreadMails(): array {
+        $this->inbox = imap_open($this->server, $this->username, $this->password);
+        if (!$this->inbox) {
+            die('❌ IMAP 連線失敗: ' . imap_last_error());
+        }
+
+        $since  = date('d-M-Y', strtotime('-30 days'));
+        $emails = imap_search($this->inbox, "SINCE \"{$since}\"");
         $mailList = [];
 
         if ($emails) {
-            // 排序：從最新的信件開始處理
             rsort($emails);
 
             foreach ($emails as $mailId) {
-                $overview = imap_fetch_overview($this->inbox, $mailId, 0);
+                $overview  = imap_fetch_overview($this->inbox, $mailId, 0);
                 $structure = imap_fetchstructure($this->inbox, $mailId);
-                
-                // 使用 mb_decode_mimeheader 解決主旨亂碼
-                $subject = mb_decode_mimeheader($overview[0]->subject);
-                $from = mb_decode_mimeheader($overview[0]->from);
-                $date = $overview[0]->date;
 
-                // 抓取信件內文 (HTML 格式)
+                $subject = mb_decode_mimeheader($overview[0]->subject);
+                $from    = mb_decode_mimeheader($overview[0]->from);
+                $date    = $overview[0]->date;
+
                 $htmlBody = $this->getHtmlBody($this->inbox, $mailId, $structure);
 
                 $mailList[] = [
-                    'id' => $mailId,
-                    'from' => $from,
-                    'subject' => $subject,
-                    'date' => $date,
-                    'html_body' => $htmlBody
+                    'id'        => $mailId,
+                    'from'      => $from,
+                    'subject'   => $subject,
+                    'date'      => $date,
+                    'html_body' => $htmlBody,
                 ];
             }
         }
@@ -58,9 +89,34 @@ $emails = imap_search($this->inbox, "SINCE \"{$since}\"");
         return $mailList;
     }
 
-    // 遞迴解析信件結構，精準撈出 HTML 內文
-    private function getHtmlBody($inbox, $mailId, $structure, $partNum = "") {
-        if ($structure->type == 1) { // Multipart
+    /**
+     * 將信件移動到指定使用者的平台子信件匣
+     *
+     * @param int    $mailId       IMAP 信件 ID
+     * @param string $mailboxImap  使用者主信件匣原始名稱（如 Lin 或 &WWdOAU4B-）
+     * @param string $platformFolder 平台子信件匣名稱（如 Booking、CT）
+     * @return bool
+     */
+    public function archiveMail(int $mailId, string $mailboxImap, string $platformFolder): bool {
+        $conn = imap_open($this->server, $this->username, $this->password);
+        if (!$conn) {
+            throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
+        }
+
+        // 組合目標路徑，格式：INBOX/Lin/Booking
+        $targetFolder = 'INBOX/' . $mailboxImap . '/' . $platformFolder;
+
+        $moved = imap_mail_move($conn, (string)$mailId, $targetFolder);
+        if ($moved) {
+            imap_expunge($conn); // 確實從來源移除
+        }
+
+        imap_close($conn);
+        return $moved;
+    }
+
+    private function getHtmlBody($inbox, $mailId, $structure, $partNum = '') {
+        if ($structure->type == 1) {
             foreach ($structure->parts as $index => $subPart) {
                 $newPartNum = empty($partNum) ? ($index + 1) : $partNum . '.' . ($index + 1);
                 $body = $this->getHtmlBody($inbox, $mailId, $subPart, $newPartNum);
@@ -68,83 +124,10 @@ $emails = imap_search($this->inbox, "SINCE \"{$since}\"");
             }
         } elseif ($structure->subtype == 'HTML') {
             $body = imap_fetchbody($inbox, $mailId, empty($partNum) ? 1 : $partNum);
-            if ($structure->encoding == 3) return base64_decode($body); // Base64 記憶體解碼
-            if ($structure->encoding == 4) return quoted_printable_decode($body); // Quoted-Printable 解碼
+            if ($structure->encoding == 3) return base64_decode($body);
+            if ($structure->encoding == 4) return quoted_printable_decode($body);
             return $body;
         }
         return false;
-    }
-
-    // 提供三種不同平台、不同狀況的真實模擬信件
-    private function getMockMails() {
-        return [
-            [
-                'id' => 19,
-                'from' => 'OwlNest_Booking <ownlest@owlting.com>',
-                'subject' => 'Booking.com 訂單成立通知_(訂單編號_OBE94670282026052112)*此信件由系統自動發送，請勿直接回信',
-                'date' => date('Y-m-d H:i:s'),
-                'html_body' => $this->getBookingMockHtml() 
-            ],
-            [
-                'id' => 17,
-                'from' => 'OwlNest_Booking <ownlest@owlting.com>',
-                'subject' => 'Agoda 訂單取消通知_(訂單編號_OBE72020282026052111)*此信件由系統自動發送，請勿直接回信',
-                'date' => date('Y-m-d H:i:s', strtotime('-5 mins')),
-                'html_body' => $this->getAgodaCancelMockHtml() 
-            ],
-            [
-                'id' => 14,
-                'from' => 'noreply_htl@trip.com',
-                'subject' => '已確認訂單編號_#1359044754534463#//Booking_no._#1359044754534463#_accepted#1359044754534463#',
-                'date' => date('Y-m-d H:i:s', strtotime('-15 mins')),
-                'html_body' => $this->getTripMockHtml() 
-            ]
-        ];
-    }
-
-    private function getBookingMockHtml() {
-        return '
-        <div style="text-align:center; color:#642100; font-size:30px; font-weight:bold;">來自 Booking.com 的新訂單！</div>
-        <div>稍早透過 Booking.com 獲得一筆新訂單，OTA訂單編號為: 5869639335，預訂資訊如下：</div>
-        <div>訂單編號： OBE94670282026052112</div>
-        <table>
-            <tr><td><div style="color:#087abc;">2026-07-15</div></td><td><div style="color:#087abc;">2026-07-17</div></td></tr>
-        </table>
-        <span>TWD 2,353</span>
-        <table>
-            <tr><td>旅客姓名</td><td><div><span>施佳賢</span></div></td></tr>
-            <tr><td>旅客電話</td><td><div><span>+886**** 509 972</span></div></td></tr>
-            <tr><td>特殊需求</td><td><div><span>Guest Name: 施 佳賢, 有帶一隻紅貴賓約2kg以內，不會隨地大小便</span></div></td></tr>
-        </table>';
-    }
-
-    private function getAgodaCancelMockHtml() {
-        return '
-        <div style="text-align:center; color:#c0392b; font-size:30px; font-weight:bold;">Agoda 訂單取消通知 (CANCELLED)</div>
-        <div>您的奧丁丁通道已收到一筆取消，OTA訂單編號為: 1729785363</div>
-        <div>訂單編號： OBE72020282026052111</div>
-        <table>
-            <tr><td><div style="color:#087abc;">2026-08-20</div></td><td><div style="color:#087abc;">2026-08-22</div></td></tr>
-        </table>
-        <span>TWD 0</span>
-        <table>
-            <tr><td>旅客姓名</td><td><div><span>林大華</span></div></td></tr>
-            <tr><td>旅客電話</td><td><div><span>+886**** 123 456</span></div></td></tr>
-            <tr><td>特殊需求</td><td><div><span>【訂單已取消】旅客因行程變更取消此筆預訂。</span></div></td></tr>
-        </table>';
-    }
-
-    private function getTripMockHtml() {
-        return '
-        <div style="font-size:24px; color:#ff9900;">Trip.com 訂單確認成功</div>
-        <div>親愛的旅宿夥伴，攜程/Trip.com 訂單編號為: 1359044754534463 </div>
-        <div>訂單編號： OBE56990282226052112</div>
-        <p>入住日期：2026-10-01 / 退房日期：2026-10-05</p>
-        <div>訂單總額: TWD 5,800 </div>
-        <table>
-            <tr><td>旅客姓名</td><td><span>陳小美 (Chen Xiao Mei)</span></td></tr>
-            <tr><td>旅客電話</td><td><span>+86**** 1399 999</span></td></tr>
-            <tr><td>特殊需求</td><td><span>高樓層、禁菸房、需要兩大枕頭。</span></td></tr>
-        </table>';
     }
 }

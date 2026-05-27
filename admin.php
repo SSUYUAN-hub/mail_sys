@@ -16,7 +16,6 @@ $msgType = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    // ---- 改自己密碼（管理者 + 一般使用者都可以）----
     if ($action === 'change_own_password') {
         $oldPw  = $_POST['old_password']  ?? '';
         $newPw  = $_POST['new_password']  ?? '';
@@ -38,17 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = '密碼已更新。'; $msgType = 'success';
         }
 
-    // ---- 以下僅管理者 ----
     } elseif ($isAdmin) {
 
         $targetId = (int)($_POST['target_id'] ?? 0);
 
-        // 審核通過
         if ($action === 'approve') {
             $pdo->prepare("UPDATE users SET status = 'active' WHERE id = ? AND role != 'admin'")->execute([$targetId]);
             $msg = '帳號已審核通過。'; $msgType = 'success';
 
-        // 停用
         } elseif ($action === 'disable') {
             if ($targetId === $user['id']) {
                 $msg = '不能停用自己的帳號。'; $msgType = 'error';
@@ -57,12 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = '帳號已停用。'; $msgType = 'success';
             }
 
-        // 重新啟用
         } elseif ($action === 'enable') {
             $pdo->prepare("UPDATE users SET status = 'active' WHERE id = ?")->execute([$targetId]);
             $msg = '帳號已重新啟用。'; $msgType = 'success';
 
-        // 刪除
         } elseif ($action === 'delete') {
             if ($targetId === $user['id']) {
                 $msg = '不能刪除自己的帳號。'; $msgType = 'error';
@@ -71,7 +65,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = '帳號已刪除。'; $msgType = 'success';
             }
 
-        // 管理者重設他人密碼
         } elseif ($action === 'reset_password') {
             $newPw  = $_POST['new_password']  ?? '';
             $newPw2 = $_POST['new_password2'] ?? '';
@@ -85,7 +78,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = '密碼已重設。'; $msgType = 'success';
             }
 
-        // 修改使用者名稱
         } elseif ($action === 'rename') {
             $newName = trim($_POST['new_username'] ?? '');
             if (mb_strlen($newName) < 3 || mb_strlen($newName) > 50) {
@@ -100,20 +92,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $msg = '此帳號名稱已被使用。'; $msgType = 'error';
                 }
             }
+
+        } elseif ($action === 'assign_mailbox') {
+            // 分配信件匣
+            $mailboxImap = trim($_POST['mailbox_imap'] ?? '');
+            if ($mailboxImap === '__none__') $mailboxImap = '';
+            $pdo->prepare("UPDATE users SET mailbox_imap = ? WHERE id = ?")->execute([
+                $mailboxImap ?: null,
+                $targetId,
+            ]);
+            $msg = $mailboxImap ? "信件匣已分配。" : "已清除信件匣設定。";
+            $msgType = 'success';
         }
     }
 }
 
-// 讀取使用者清單（管理者）
+// ============================================================
+// 讀取資料
+// ============================================================
 $allUsers = [];
 if ($isAdmin) {
-    $allUsers = $pdo->query("SELECT id, username, role, status, created_at FROM users ORDER BY created_at DESC")->fetchAll();
+    $allUsers = $pdo->query("SELECT id, username, role, status, created_at, mailbox_imap FROM users ORDER BY created_at DESC")->fetchAll();
 }
 
-// 讀取待審核數量
 $pendingCount = 0;
 if ($isAdmin) {
     $pendingCount = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE status = 'pending'")->fetchColumn();
+}
+
+// 從 IMAP 偵測可用信件匣清單
+$availableMailboxes = [];
+$mailboxError = '';
+if ($isAdmin) {
+    try {
+        require_once __DIR__ . '/mail_fetcher.php';
+        $fetcher = new MailFetcher();
+        $availableMailboxes = $fetcher->fetchMainMailboxes();
+    } catch (Throwable $e) {
+        $mailboxError = $e->getMessage();
+    }
+}
+
+// 建立 imap_name → display_name 的對照表（供表格顯示用）
+$mailboxDisplayMap = [];
+foreach ($availableMailboxes as $mb) {
+    $mailboxDisplayMap[$mb['imap_name']] = $mb['display_name'];
 }
 ?>
 <!DOCTYPE html>
@@ -131,7 +154,6 @@ if ($isAdmin) {
             background: #f8f9fa;
             font-family: "Microsoft JhengHei", sans-serif;
         }
-        /* Topbar */
         .topbar {
             background: #642100;
             color: white;
@@ -171,10 +193,8 @@ if ($isAdmin) {
             transition: background 0.2s;
         }
         .btn-logout:hover { background: rgba(255,255,255,0.28); }
-
-        /* 主容器 */
         .container {
-            max-width: 1100px;
+            max-width: 1200px;
             margin: 2rem auto;
             padding: 0 1.5rem;
         }
@@ -193,8 +213,6 @@ if ($isAdmin) {
             padding-left: 0.75rem;
             margin: 0 0 1.25rem;
         }
-
-        /* Alert */
         .alert {
             padding: 0.75rem 1rem;
             border-radius: 6px;
@@ -203,8 +221,7 @@ if ($isAdmin) {
         }
         .alert-error   { background: #fde8e8; color: #c0392b; border: 1px solid #f5b7b1; }
         .alert-success { background: #eafaf1; color: #1e8449; border: 1px solid #a9dfbf; }
-
-        /* 表單 */
+        .alert-warning { background: #fef9e7; color: #b7950b; border: 1px solid #f9ca24; }
         .form-row {
             display: flex;
             gap: 0.75rem;
@@ -237,14 +254,13 @@ if ($isAdmin) {
             white-space: nowrap;
         }
         .btn:hover { opacity: 0.85; }
-        .btn-primary  { background: #642100; color: white; }
-        .btn-success  { background: #27ae60; color: white; }
-        .btn-warning  { background: #e67e22; color: white; }
-        .btn-danger   { background: #c0392b; color: white; }
+        .btn-primary   { background: #642100; color: white; }
+        .btn-success   { background: #27ae60; color: white; }
+        .btn-warning   { background: #e67e22; color: white; }
+        .btn-danger    { background: #c0392b; color: white; }
         .btn-secondary { background: #6c757d; color: white; }
+        .btn-info      { background: #2980b9; color: white; }
         .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.78rem; }
-
-        /* 使用者表格 */
         table { width: 100%; border-collapse: collapse; }
         th, td {
             border: 1px solid #dee2e6;
@@ -258,8 +274,6 @@ if ($isAdmin) {
             font-weight: bold;
         }
         tr:hover { background: #fdf6f0; }
-
-        /* Status badge */
         .status-badge {
             display: inline-block;
             padding: 0.2rem 0.5rem;
@@ -279,8 +293,20 @@ if ($isAdmin) {
         }
         .role-admin { background: #642100; color: white; }
         .role-user  { background: #adb5bd; color: white; }
-
-        /* 待審核提示 */
+        .mailbox-badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: bold;
+            background: #e8f4fd;
+            color: #1a5276;
+            border: 1px solid #aed6f1;
+        }
+        .mailbox-none {
+            color: #aaa;
+            font-size: 0.78rem;
+        }
         .pending-banner {
             background: #fef9e7;
             border: 1px solid #f9ca24;
@@ -291,7 +317,16 @@ if ($isAdmin) {
             margin-bottom: 1rem;
             font-weight: bold;
         }
-
+        select {
+            padding: 0.3rem 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.78rem;
+            font-family: inherit;
+            background: white;
+            cursor: pointer;
+        }
+        select:focus { outline: none; border-color: #642100; }
         /* Modal */
         .modal-overlay {
             display: none;
@@ -340,6 +375,7 @@ if ($isAdmin) {
         }
         .modal-form-group input:focus { border-color: #642100; }
         .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.25rem; }
+        .mailbox-refresh-note { font-size: 0.75rem; color: #888; margin-top: 0.5rem; }
     </style>
 </head>
 <body>
@@ -361,7 +397,7 @@ if ($isAdmin) {
     <div class="alert alert-<?php echo $msgType; ?>"><?php echo htmlspecialchars($msg); ?></div>
     <?php endif; ?>
 
-    <!-- ===== 修改自己密碼（所有人） ===== -->
+    <!-- ===== 修改自己密碼 ===== -->
     <div class="section">
         <div class="section-title">🔑 修改我的密碼</div>
         <form method="POST">
@@ -386,14 +422,28 @@ if ($isAdmin) {
 
     <?php if ($isAdmin): ?>
 
-    <!-- ===== 待審核提示 ===== -->
     <?php if ($pendingCount > 0): ?>
     <div class="pending-banner">
         ⏳ 目前有 <b><?php echo $pendingCount; ?></b> 個帳號申請待審核，請在下方清單審核。
     </div>
     <?php endif; ?>
 
-    <!-- ===== 使用者清單（管理者） ===== -->
+    <!-- ===== 信件匣偵測狀態 ===== -->
+    <?php if ($mailboxError): ?>
+    <div class="alert alert-warning">⚠️ 無法連線 IMAP 偵測信件匣：<?php echo htmlspecialchars($mailboxError); ?></div>
+    <?php elseif (empty($availableMailboxes)): ?>
+    <div class="alert alert-warning">📭 目前 INBOX 下沒有偵測到任何子信件匣，請先在 Mail2000 建立主信件匣。</div>
+    <?php else: ?>
+    <div class="alert alert-success">
+        ✅ 已偵測到 <?php echo count($availableMailboxes); ?> 個主信件匣：
+        <?php foreach ($availableMailboxes as $mb): ?>
+            <span class="mailbox-badge"><?php echo htmlspecialchars($mb['display_name']); ?></span>
+        <?php endforeach; ?>
+        <div class="mailbox-refresh-note">若剛在 Mail2000 新增信件匣，請重新整理此頁面即可自動偵測。</div>
+    </div>
+    <?php endif; ?>
+
+    <!-- ===== 使用者清單 ===== -->
     <div class="section">
         <div class="section-title">👥 使用者管理</div>
         <table>
@@ -403,6 +453,7 @@ if ($isAdmin) {
                     <th>帳號</th>
                     <th>角色</th>
                     <th>狀態</th>
+                    <th>分配信件匣</th>
                     <th>建立時間</th>
                     <th>操作</th>
                 </tr>
@@ -419,7 +470,7 @@ if ($isAdmin) {
                 </td>
                 <td>
                     <?php
-                    $statusMap = ['active' => '啟用', 'pending' => '待審核', 'disabled' => '已停用'];
+                    $statusMap   = ['active' => '啟用', 'pending' => '待審核', 'disabled' => '已停用'];
                     $statusClass = ['active' => 'status-active', 'pending' => 'status-pending', 'disabled' => 'status-disabled'];
                     $s = $u['status'];
                     ?>
@@ -427,11 +478,40 @@ if ($isAdmin) {
                         <?php echo $statusMap[$s] ?? $s; ?>
                     </span>
                 </td>
+                <td>
+                    <?php if ($u['role'] !== 'admin'): ?>
+                        <?php
+                        $currentImap    = $u['mailbox_imap'] ?? '';
+                        $currentDisplay = $currentImap
+                            ? ($mailboxDisplayMap[$currentImap] ?? $currentImap)
+                            : '';
+                        ?>
+                        <form method="POST" style="display:flex;align-items:center;gap:0.4rem;">
+                            <input type="hidden" name="action" value="assign_mailbox">
+                            <input type="hidden" name="target_id" value="<?php echo $u['id']; ?>">
+                            <select name="mailbox_imap" onchange="this.form.submit()" title="選擇信件匣">
+                                <option value="__none__" <?php echo empty($currentImap) ? 'selected' : ''; ?>>— 未分配 —</option>
+                                <?php foreach ($availableMailboxes as $mb): ?>
+                                <option value="<?php echo htmlspecialchars($mb['imap_name']); ?>"
+                                    <?php echo $currentImap === $mb['imap_name'] ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($mb['display_name']); ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php if ($currentDisplay): ?>
+                            <span class="mailbox-badge"><?php echo htmlspecialchars($currentDisplay); ?></span>
+                            <?php else: ?>
+                            <span class="mailbox-none">未設定</span>
+                            <?php endif; ?>
+                        </form>
+                    <?php else: ?>
+                        <span style="color:#aaa;font-size:0.78rem;">—</span>
+                    <?php endif; ?>
+                </td>
                 <td style="font-size:0.78rem;color:#888;"><?php echo $u['created_at']; ?></td>
                 <td>
                     <?php if ($u['role'] !== 'admin'): ?>
                         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
-                            <!-- 審核 -->
                             <?php if ($u['status'] === 'pending'): ?>
                             <form method="POST" style="display:inline;">
                                 <input type="hidden" name="action" value="approve">
@@ -440,7 +520,6 @@ if ($isAdmin) {
                             </form>
                             <?php endif; ?>
 
-                            <!-- 停用 / 啟用 -->
                             <?php if ($u['status'] === 'active'): ?>
                             <form method="POST" style="display:inline;">
                                 <input type="hidden" name="action" value="disable">
@@ -455,19 +534,14 @@ if ($isAdmin) {
                             </form>
                             <?php endif; ?>
 
-                            <!-- 改帳號名稱 -->
                             <button class="btn btn-secondary btn-sm"
                                 onclick="openRenameModal(<?php echo $u['id']; ?>, '<?php echo htmlspecialchars($u['username'], ENT_QUOTES); ?>')">
                                 ✏️ 改帳號
                             </button>
-
-                            <!-- 重設密碼 -->
                             <button class="btn btn-secondary btn-sm"
                                 onclick="openResetModal(<?php echo $u['id']; ?>, '<?php echo htmlspecialchars($u['username'], ENT_QUOTES); ?>')">
                                 🔑 重設密碼
                             </button>
-
-                            <!-- 刪除 -->
                             <form method="POST" style="display:inline;"
                                 onsubmit="return confirm('確定要刪除帳號「<?php echo htmlspecialchars($u['username'], ENT_QUOTES); ?>」？此動作無法復原。')">
                                 <input type="hidden" name="action" value="delete">
