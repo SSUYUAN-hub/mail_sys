@@ -72,8 +72,9 @@ try {
     $fetcher = new MailFetcher();
     $success = $fetcher->archiveMail($mailId, $mailboxImap, $platformFolder);
 
+    // 失敗時 archiveMail() 內部已 throw RuntimeException，這裡不會執行到
     if (!$success) {
-        throw new RuntimeException('IMAP 移動失敗，請確認目標信件匣是否存在：INBOX/' . $mailboxImap . '/' . $platformFolder);
+        throw new RuntimeException('IMAP 移動失敗');
     }
 
     echo json_encode([

@@ -120,13 +120,45 @@ class MailFetcher {
             throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
         }
 
-        // mailboxImap 已含完整路徑（如 INBOX/&YB2QYA- 或 INBOX/Lin）
-        // imap_mail_move 目標直接拼平台子資料夾
-        $targetFolder = $mailboxImap . '/' . $platformFolder;
+        // 列出目標信件匣下所有子資料夾，找出實際存在的路徑
+        // Mail2000 可能用 . 或 / 作為分隔符，動態偵測
+        $parentFolder = $mailboxImap; // 如 INBOX/&YB2QYA-
+
+        // 列出 parentFolder 下第一層子資料夾
+        $subList = imap_list($conn, $this->server, $parentFolder . '/%');
+        if (!$subList) {
+            // 嘗試用 . 分隔
+            $subList = imap_list($conn, $this->server, $parentFolder . '.%');
+        }
+
+        $targetFolder = null;
+        if ($subList) {
+            foreach ($subList as $fullPath) {
+                $rel = str_replace($this->server, '', $fullPath);
+                $rel = ltrim($rel, '/');
+                // 取最後一段比對平台資料夾名稱
+                $parts = preg_split('/[\/\.]/', $rel);
+                $last  = end($parts);
+                if (strcasecmp($last, $platformFolder) === 0) {
+                    $targetFolder = $rel;
+                    break;
+                }
+            }
+        }
+
+        // 若動態偵測失敗，退回預設路徑
+        if (!$targetFolder) {
+            $targetFolder = $mailboxImap . '/' . $platformFolder;
+        }
 
         $moved = imap_mail_move($conn, (string)$mailId, $targetFolder);
         if ($moved) {
-            imap_expunge($conn); // 確實從來源移除
+            imap_expunge($conn);
+        } else {
+            // 回傳更詳細的錯誤供除錯
+            $lastErr = imap_last_error();
+            imap_close($conn);
+            throw new RuntimeException('IMAP 移動失敗，目標路徑：' . $targetFolder . '，錯誤：' . $lastErr);
         }
 
         imap_close($conn);
