@@ -578,14 +578,16 @@ async function fetchOrders(forceRefresh = false) {
 
         if (!data.success) throw new Error(data.error || '伺服器回傳錯誤');
 
-        // 首次同步中提示
+        // 首次同步中（DB 完全沒資料）：顯示等待提示並輪詢
         if (data.is_syncing && data.total_orders === 0) {
-            content.innerHTML = `<div class="syncing-bar">
-                <div class="spinner" style="width:1.2rem;height:1.2rem;border-width:3px;"></div>
-                背景同步中，正在解析信件，請稍候...
+            content.innerHTML = `<div class="syncing-bar" style="justify-content:center;padding:3rem;">
+                <div class="spinner" style="width:1.5rem;height:1.5rem;border-width:3px;margin-right:0.5rem;"></div>
+                背景同步中，正在解析信件，完成後自動顯示...
             </div>`;
             content.dataset.loaded = '';
-            setTimeout(() => fetchOrders(false), 3000);
+            // 每 5 秒輪詢一次，等資料進 DB
+            setTimeout(() => fetchOrders(false), 5000);
+            document.getElementById('btnRefresh').disabled = false;
             return;
         }
 
