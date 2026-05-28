@@ -120,48 +120,27 @@ class MailFetcher {
             throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
         }
 
-        // 列出目標信件匣下所有子資料夾，找出實際存在的路徑
-        // Mail2000 可能用 . 或 / 作為分隔符，動態偵測
-        $parentFolder = $mailboxImap; // 如 INBOX/&YB2QYA-
+        // mailboxImap 為 imap_list 回傳去掉 server prefix 後的值（如 INBOX/&YB2QYA-）
+        // imap_mail_move 目標路徑直接拼平台子資料夾
+        $targetFolder = $mailboxImap . '/' . $platformFolder;
 
-        // 列出 parentFolder 下第一層子資料夾
-        $subList = imap_list($conn, $this->server, $parentFolder . '/%');
-        if (!$subList) {
-            // 嘗試用 . 分隔
-            $subList = imap_list($conn, $this->server, $parentFolder . '.%');
-        }
-
-        $targetFolder = null;
-        if ($subList) {
-            foreach ($subList as $fullPath) {
-                $rel = str_replace($this->server, '', $fullPath);
-                $rel = ltrim($rel, '/');
-                // 取最後一段比對平台資料夾名稱
-                $parts = preg_split('/[\/\.]/', $rel);
-                $last  = end($parts);
-                if (strcasecmp($last, $platformFolder) === 0) {
-                    // imap_list 回傳的相對路徑已去掉 server prefix 和開頭 /
-                    // 但 imap_mail_move 需要完整路徑（含 INBOX/）
-                    // 若路徑不是以 INBOX 開頭，補上
-                    $targetFolder = preg_match('/^INBOX/i', $rel) ? $rel : 'INBOX/' . $rel;
-                    break;
-                }
-            }
-        }
-
-        // 若動態偵測失敗，退回預設路徑
-        if (!$targetFolder) {
-            $targetFolder = $mailboxImap . '/' . $platformFolder;
-        }
+        // 診斷用：將實際嘗試的路徑寫入錯誤日誌
+        error_log('[archiveMail] mailboxImap=' . $mailboxImap . ' platform=' . $platformFolder . ' target=' . $targetFolder);
 
         $moved = imap_mail_move($conn, (string)$mailId, $targetFolder);
         if ($moved) {
             imap_expunge($conn);
         } else {
-            // 回傳更詳細的錯誤供除錯
             $lastErr = imap_last_error();
+            // 列出 mailboxImap 下所有子資料夾，回傳供診斷
+            $subList = imap_list($conn, $this->server, $mailboxImap . '/%') ?: [];
+            $subListStr = implode(' | ', $subList);
             imap_close($conn);
-            throw new RuntimeException('IMAP 移動失敗，目標路徑：' . $targetFolder . '，錯誤：' . $lastErr);
+            throw new RuntimeException(
+                'IMAP 移動失敗，目標路徑：' . $targetFolder .
+                '，IMAP 錯誤：' . $lastErr .
+                '，子資料夾清單：' . ($subListStr ?: '（空）')
+            );
         }
 
         imap_close($conn);
