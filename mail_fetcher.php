@@ -31,7 +31,7 @@ class MailFetcher {
 
         $result = [];
         foreach ($raw as $fullPath) {
-            // 去掉 server prefix，只保留 /xxx 部分，再去掉開頭 /
+            // 去掉 server prefix，只保留 INBOX/xxx 部分，再去掉開頭 /
             $relative = str_replace($this->server, '', $fullPath);
             $imapName = ltrim($relative, '/');
 
@@ -120,8 +120,8 @@ class MailFetcher {
             throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
         }
 
-        // server 環境變數已含 INBOX，路徑格式：{server}/{mailboxImap}/{platformFolder}
-        // imap_mail_move 的目標只需 INBOX 後面的部分
+        // mailboxImap 已含完整路徑（如 INBOX/&YB2QYA- 或 INBOX/Lin）
+        // imap_mail_move 目標直接拼平台子資料夾
         $targetFolder = $mailboxImap . '/' . $platformFolder;
 
         $moved = imap_mail_move($conn, (string)$mailId, $targetFolder);
