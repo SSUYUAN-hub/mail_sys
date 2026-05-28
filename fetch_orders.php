@@ -1,9 +1,20 @@
 <?php
 // fetch_orders.php - 從 DB 讀取訂單，並在回應後背景同步
+
+// 攔截所有意外輸出（PHP notice/warning 等），防止污染 JSON
+ob_start();
+
 require_once __DIR__ . '/auth.php';
 requireLogin();
 
+// 清除 auth.php 可能產生的任何輸出
+ob_clean();
+
 header('Content-Type: application/json; charset=utf-8');
+
+// 關閉錯誤顯示，只記錄到 error_log
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/mail_fetcher.php';
@@ -74,7 +85,8 @@ try {
         'cache_age'    => time() - $lastSync,
     ];
 
-    // 回傳資料給前端
+    // 清除所有意外輸出，只回傳純 JSON
+    ob_clean();
     echo json_encode($result, JSON_UNESCAPED_UNICODE);
 
     // ── 背景同步（回應後繼續執行）────────────────────────────
