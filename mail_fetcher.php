@@ -140,7 +140,10 @@ class MailFetcher {
                 $parts = preg_split('/[\/\.]/', $rel);
                 $last  = end($parts);
                 if (strcasecmp($last, $platformFolder) === 0) {
-                    $targetFolder = $rel;
+                    // imap_list 回傳的相對路徑已去掉 server prefix 和開頭 /
+                    // 但 imap_mail_move 需要完整路徑（含 INBOX/）
+                    // 若路徑不是以 INBOX 開頭，補上
+                    $targetFolder = preg_match('/^INBOX/i', $rel) ? $rel : 'INBOX/' . $rel;
                     break;
                 }
             }
