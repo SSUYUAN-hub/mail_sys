@@ -120,21 +120,23 @@ class MailFetcher {
             throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
         }
 
-        // 診斷：列出 INBOX 下所有資料夾，找出實際路徑
-        $allFolders = imap_list($conn, $this->server, 'INBOX/*') ?: [];
-        $allFoldersStr = implode(' | ', $allFolders);
+        // 用萬用字元 * 列出所有層級的信件匣
+        $allFolders = imap_list($conn, $this->server, '*') ?: [];
 
-        // 從所有資料夾中，找名稱結尾符合 platformFolder 的那一筆
+        // 從 DB 取得的 mailboxImap 可能是 "INBOX/&YB2QYA-" 或 "&YB2QYA-"（不含INBOX/）
+        // 統一取最後一段作為主信件匣識別名稱
+        $mailboxSegments = preg_split('/[\/.]/', $mailboxImap);
+        $mailboxName = end($mailboxSegments); // 如 &YB2QYA-
+
+        // 建立期望的目標路徑結尾：&YB2QYA-/Agoda
+        $expectedSuffix = $mailboxName . '/' . $platformFolder;
+
         $targetFolder = null;
         foreach ($allFolders as $fullPath) {
-            // fullPath 格式：{server}INBOX/xxx/Agoda
-            $rel = str_replace($this->server, '', $fullPath); // 去掉 server prefix
-            $rel = ltrim($rel, '/');
-            $segments = preg_split('/[\/.]/', $rel);
-            $lastName = end($segments);
-            // 第二段（index 1）= 主信件匣名稱，最後一段 = 平台資料夾
-            if (count($segments) >= 3 && strcasecmp($lastName, $platformFolder) === 0) {
-                // 用原始 fullPath 去掉 server prefix，得到完整相對路徑
+            // 去掉 server prefix，如 {tls.mail2000.com.tw:993/imap/ssl}
+            $rel = preg_replace('/^\{[^}]+\}/', '', $fullPath);
+            // 檢查是否以期望的結尾結束（如 INBOX/&YB2QYA-/Agoda）
+            if (substr($rel, -strlen($expectedSuffix)) === $expectedSuffix) {
                 $targetFolder = $rel;
                 break;
             }
@@ -143,9 +145,9 @@ class MailFetcher {
         if (!$targetFolder) {
             imap_close($conn);
             throw new RuntimeException(
-                '找不到目標資料夾，mailboxImap=' . $mailboxImap .
-                '，platform=' . $platformFolder .
-                '，所有資料夾：' . ($allFoldersStr ?: '（空）')
+                '找不到目標資料夾，mailboxName=' . $mailboxName .
+                '，expectedSuffix=' . $expectedSuffix .
+                '，所有資料夾：' . implode(' | ', $allFolders)
             );
         }
 
