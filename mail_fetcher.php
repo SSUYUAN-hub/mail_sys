@@ -72,7 +72,7 @@ class MailFetcher {
     public function fetchUnreadMails(): array {
         $this->inbox = imap_open($this->server, $this->username, $this->password);
         if (!$this->inbox) {
-            die('❌ IMAP 連線失敗: ' . imap_last_error());
+            throw new RuntimeException('IMAP 連線失敗: ' . imap_last_error());
         }
 
         $since  = date('d-M-Y', strtotime('-30 days'));
@@ -86,24 +86,70 @@ class MailFetcher {
                 $overview  = imap_fetch_overview($this->inbox, $mailId, 0);
                 $structure = imap_fetchstructure($this->inbox, $mailId);
 
-                $subject = mb_decode_mimeheader($overview[0]->subject);
-                $from    = mb_decode_mimeheader($overview[0]->from);
-                $date    = $overview[0]->date;
+                $subject = mb_decode_mimeheader($overview[0]->subject ?? '');
+                $from    = mb_decode_mimeheader($overview[0]->from    ?? '');
+                $date    = $overview[0]->date ?? '';
+
+                // 從 overview flags 解析自訂 keyword（認領者）
+                // IMAP 標準旗標開頭為 \，自訂 keyword 不帶 \
+                $claimedBy = null;
+                if (!empty($overview[0]->keywords)) {
+                    $keywords = trim($overview[0]->keywords);
+                    if ($keywords) $claimedBy = $keywords;
+                }
 
                 $htmlBody = $this->getHtmlBody($this->inbox, $mailId, $structure);
 
                 $mailList[] = [
-                    'id'        => $mailId,
-                    'from'      => $from,
-                    'subject'   => $subject,
-                    'date'      => $date,
-                    'html_body' => $htmlBody,
+                    'id'         => $mailId,
+                    'from'       => $from,
+                    'subject'    => $subject,
+                    'date'       => $date,
+                    'html_body'  => $htmlBody,
+                    'claimed_by' => $claimedBy,
                 ];
             }
         }
 
         imap_close($this->inbox);
         return $mailList;
+    }
+
+    /**
+     * 取得單封信件目前的認領者 keyword
+     */
+    public function getClaimedBy(int $mailId): ?string {
+        $conn = imap_open($this->server, $this->username, $this->password);
+        if (!$conn) throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
+
+        $overview = imap_fetch_overview($conn, (string)$mailId, 0);
+        imap_close($conn);
+
+        if (!$overview || empty($overview[0]->keywords)) return null;
+        $kw = trim($overview[0]->keywords);
+        return $kw ?: null;
+    }
+
+    /**
+     * 認領信件：設定自訂 keyword flag
+     */
+    public function claimMail(int $mailId, string $keyword): void {
+        $conn = imap_open($this->server, $this->username, $this->password);
+        if (!$conn) throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
+
+        imap_setflag_full($conn, (string)$mailId, $keyword);
+        imap_close($conn);
+    }
+
+    /**
+     * 取消認領：清除自訂 keyword flag
+     */
+    public function unclaimMail(int $mailId, string $keyword): void {
+        $conn = imap_open($this->server, $this->username, $this->password);
+        if (!$conn) throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
+
+        imap_clearflag_full($conn, (string)$mailId, $keyword);
+        imap_close($conn);
     }
 
     /**

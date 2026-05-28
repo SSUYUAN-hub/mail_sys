@@ -1,7 +1,16 @@
 <?php
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/db.php';
 requireLogin();
 $user = currentUser();
+
+// 取得目前使用者的 mailbox_imap（作為認領 keyword）
+$pdo = getDB();
+$stmt = $pdo->prepare('SELECT mailbox_imap FROM users WHERE id = ?');
+$stmt->execute([$user['id']]);
+$myMailbox = $stmt->fetchColumn() ?: '';
+// keyword 只能 ASCII，&YB2QYA- 符合；若有非法字元改用 username
+$myKeyword = preg_match('/^[\x21-\x7e]+$/', $myMailbox) ? $myMailbox : $user['username'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -242,6 +251,55 @@ $user = currentUser();
         .modal-content { font-size: 0.875rem; line-height: 1.8; color: #333; white-space: pre-wrap; word-break: break-word; }
         .modal-close { position: absolute; top: 0.75rem; right: 1rem; background: none; border: none; font-size: 1.375rem; cursor: pointer; color: #888; }
         .modal-close:hover { color: #333; }
+
+        /* 認領標籤 */
+        .claim-cell { text-align: center; min-width: 80px; }
+        .btn-claim {
+            background: #f0f4ff;
+            border: 1px solid #aab8ff;
+            border-radius: 4px;
+            padding: 0.25rem 0.6rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            color: #3451b2;
+            font-family: inherit;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .btn-claim:hover { background: #dce4ff; }
+        .btn-claim:disabled { opacity: 0.5; cursor: not-allowed; }
+        .claim-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 0.2rem 0.5rem;
+            font-size: 0.75rem;
+            color: #856404;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .claim-badge.mine {
+            background: #d1ecf1;
+            border-color: #17a2b8;
+            color: #0c5460;
+            cursor: pointer;
+        }
+        .claim-badge.mine:hover { background: #b8daff; }
+        .syncing-bar {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            font-size: 0.82rem;
+            color: #856404;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -257,6 +315,19 @@ $user = currentUser();
     </div>
 </div>
 
+<script>
+// 當前使用者的認領 keyword（由 PHP 傳入）
+const MY_KEYWORD = <?php echo json_encode($myKeyword); ?>;
+const MY_DISPLAY = <?php echo json_encode($myMailbox ? (function($mb){
+    // 解碼 Modified UTF-7 顯示名稱
+    return preg_replace_callback('/&([^-]*)-/', function($m){
+        if($m[1]==='') return '&';
+        $b = str_replace(',','/',$m[1]);
+        $d = base64_decode($b);
+        return mb_convert_encoding($d,'UTF-8','UTF-16BE');
+    }, $mb);
+})($myMailbox) : $user['username']); ?>;
+</script>
 <div class="container">
     <div class="page-header">
         <div>
@@ -369,8 +440,22 @@ function buildMainRow(o, groupId, extraCount) {
 
     const roomType = (o.room_type && o.room_type !== '無') ? escHtml(o.room_type) : '<span style="color:#aaa;">—</span>';
 
+    // 認領欄
+    const claimedBy = o.claimed_by || null;
+    let claimCell = '';
+    if (claimedBy) {
+        const isMine = claimedBy === MY_KEYWORD;
+        // 解碼顯示名稱
+        const displayName = isMine ? MY_DISPLAY : claimedBy;
+        claimCell = isMine
+            ? `<span class="claim-badge mine" title="點擊取消認領" onclick="toggleClaim(${o.mail_id}, 'unclaim', this)">🔖 ${escHtml(displayName)} ✕</span>`
+            : `<span class="claim-badge">🔖 ${escHtml(displayName)}</span>`;
+    } else {
+        claimCell = `<button class="btn-claim" onclick="toggleClaim(${o.mail_id}, 'claim', this)">☐ 認領</button>`;
+    }
+
     return `
-    <tr class="main-row${isModified ? ' modified-row' : ''}">
+    <tr class="main-row${isModified ? ' modified-row' : ''}" id="row_${o.mail_id}">
         <td>${escHtml(String(o.mail_id))}${expandBtn}</td>
         <td><span class="badge ${badge}">${escHtml(o.platform)}</span></td>
         <td><code style="font-size:0.75rem;">${escHtml(o.ota_number)}</code></td>
@@ -382,6 +467,7 @@ function buildMainRow(o, groupId, extraCount) {
         <td>${escHtml(o.customer_phone)}</td>
         <td>${amountCell}</td>
         <td>${remarkCell}</td>
+        <td class="claim-cell" id="claim_${o.mail_id}">${claimCell}</td>
         <td style="text-align:center;">
             ${o.platform !== '系統過濾信件'
                 ? `<button class="btn-archive" onclick="archiveMail(${o.mail_id}, '${escHtml(o.platform)}', this)">📂 歸檔</button>`
@@ -446,6 +532,7 @@ function renderTable(groups) {
         <th style="min-width:110px;">入住 / 退房日期</th>
         <th style="min-width:50px;">天數</th><th>加床</th><th style="min-width:130px;">房型</th>
         <th>聯絡電話</th><th>總金額</th><th>客房備註 (特殊需求)</th>
+        <th style="min-width:80px;text-align:center;">認領</th>
         <th style="min-width:70px;text-align:center;">歸檔</th>
     </tr></thead><tbody>`;
     groups.forEach(group => {
@@ -491,8 +578,30 @@ async function fetchOrders(forceRefresh = false) {
 
         if (!data.success) throw new Error(data.error || '伺服器回傳錯誤');
 
+        // 首次同步中提示
+        if (data.is_syncing && data.total_orders === 0) {
+            content.innerHTML = `<div class="syncing-bar">
+                <div class="spinner" style="width:1.2rem;height:1.2rem;border-width:3px;"></div>
+                背景同步中，正在解析信件，請稍候...
+            </div>`;
+            content.dataset.loaded = '';
+            setTimeout(() => fetchOrders(false), 3000);
+            return;
+        }
+
         content.innerHTML  = renderTable(data.groups);
         content.dataset.loaded = '1';
+
+        // 若仍在同步中（有新信件待解析）顯示提示
+        if (data.is_syncing) {
+            const bar = document.createElement('div');
+            bar.className = 'syncing-bar';
+            bar.id = 'syncingBar';
+            bar.innerHTML = '🔄 背景持續同步新信件中...';
+            content.prepend(bar);
+        } else {
+            document.getElementById('syncingBar')?.remove();
+        }
 
         document.getElementById('countText').textContent =
             `共 ${data.total_orders} 筆訂單（${data.total_groups} 組）`;
@@ -517,6 +626,7 @@ async function fetchOrders(forceRefresh = false) {
             ? Math.max(0, CACHE_TTL - data.cache_age)
             : CACHE_TTL;
         startCountdown(remainSec);
+        startPollClaims(); // 啟動認領狀態輪詢
 
     } catch (err) {
         setStatus('error', '連線失敗');
@@ -534,6 +644,62 @@ async function fetchOrders(forceRefresh = false) {
     } finally {
         document.getElementById('btnRefresh').disabled = false;
     }
+}
+
+// ── 認領函式 ────────────────────────────────────────────────
+async function toggleClaim(mailId, action, el) {
+    el.disabled = true;
+    const oldHtml = el.outerHTML;
+    try {
+        const body = new URLSearchParams({ mail_id: mailId, action });
+        const res  = await fetch('claim_mail.php', { method: 'POST', body });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '操作失敗');
+
+        // 立即更新畫面
+        updateClaimCell(mailId, action === 'claim' ? data.keyword : null);
+    } catch (err) {
+        alert('⚠️ ' + err.message);
+        el.disabled = false;
+    }
+}
+
+function updateClaimCell(mailId, claimedBy) {
+    const cell = document.getElementById('claim_' + mailId);
+    if (!cell) return;
+    if (claimedBy) {
+        const isMine = claimedBy === MY_KEYWORD;
+        const displayName = isMine ? MY_DISPLAY : claimedBy;
+        cell.innerHTML = isMine
+            ? `<span class="claim-badge mine" title="點擊取消認領" onclick="toggleClaim(${mailId}, 'unclaim', this)">🔖 ${escHtml(displayName)} ✕</span>`
+            : `<span class="claim-badge">🔖 ${escHtml(displayName)}</span>`;
+    } else {
+        cell.innerHTML = `<button class="btn-claim" onclick="toggleClaim(${mailId}, 'claim', this)">☐ 認領</button>`;
+    }
+}
+
+// ── 認領狀態輪詢（每 10 秒）────────────────────────────────
+let pollTimer = null;
+async function pollClaims() {
+    try {
+        const res  = await fetch('poll_claims.php', { cache: 'no-store' });
+        const data = await res.json();
+        if (!data.success) return;
+
+        // 更新所有認領狀態
+        Object.entries(data.claims).forEach(([mailId, claimedBy]) => {
+            updateClaimCell(parseInt(mailId), claimedBy);
+        });
+    } catch (e) { /* 網路問題靜默忽略 */ }
+}
+
+function startPollClaims() {
+    stopPollClaims();
+    pollClaims(); // 立即執行一次
+    pollTimer = setInterval(pollClaims, 10000);
+}
+function stopPollClaims() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
 function setStatus(type, text) {
@@ -614,7 +780,7 @@ function closeModal() { document.getElementById('remarkModal').classList.remove(
 function closeModalOutside(e) { if (e.target === document.getElementById('remarkModal')) closeModal(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-// 啟動：不強制重抓，優先用快取
+// 啟動：不強制重抓，從 DB 讀取
 fetchOrders(false);
 </script>
 </body>
