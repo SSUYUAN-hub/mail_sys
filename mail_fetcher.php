@@ -120,26 +120,44 @@ class MailFetcher {
             throw new RuntimeException('IMAP 連線失敗：' . imap_last_error());
         }
 
-        // mailboxImap 為 imap_list 回傳去掉 server prefix 後的值（如 INBOX/&YB2QYA-）
-        // imap_mail_move 目標路徑直接拼平台子資料夾
-        $targetFolder = $mailboxImap . '/' . $platformFolder;
+        // 診斷：列出 INBOX 下所有資料夾，找出實際路徑
+        $allFolders = imap_list($conn, $this->server, 'INBOX/*') ?: [];
+        $allFoldersStr = implode(' | ', $allFolders);
 
-        // 診斷用：將實際嘗試的路徑寫入錯誤日誌
-        error_log('[archiveMail] mailboxImap=' . $mailboxImap . ' platform=' . $platformFolder . ' target=' . $targetFolder);
+        // 從所有資料夾中，找名稱結尾符合 platformFolder 的那一筆
+        $targetFolder = null;
+        foreach ($allFolders as $fullPath) {
+            // fullPath 格式：{server}INBOX/xxx/Agoda
+            $rel = str_replace($this->server, '', $fullPath); // 去掉 server prefix
+            $rel = ltrim($rel, '/');
+            $segments = preg_split('/[\/.]/', $rel);
+            $lastName = end($segments);
+            // 第二段（index 1）= 主信件匣名稱，最後一段 = 平台資料夾
+            if (count($segments) >= 3 && strcasecmp($lastName, $platformFolder) === 0) {
+                // 用原始 fullPath 去掉 server prefix，得到完整相對路徑
+                $targetFolder = $rel;
+                break;
+            }
+        }
+
+        if (!$targetFolder) {
+            imap_close($conn);
+            throw new RuntimeException(
+                '找不到目標資料夾，mailboxImap=' . $mailboxImap .
+                '，platform=' . $platformFolder .
+                '，所有資料夾：' . ($allFoldersStr ?: '（空）')
+            );
+        }
 
         $moved = imap_mail_move($conn, (string)$mailId, $targetFolder);
         if ($moved) {
             imap_expunge($conn);
         } else {
             $lastErr = imap_last_error();
-            // 列出 mailboxImap 下所有子資料夾，回傳供診斷
-            $subList = imap_list($conn, $this->server, $mailboxImap . '/%') ?: [];
-            $subListStr = implode(' | ', $subList);
             imap_close($conn);
             throw new RuntimeException(
                 'IMAP 移動失敗，目標路徑：' . $targetFolder .
-                '，IMAP 錯誤：' . $lastErr .
-                '，子資料夾清單：' . ($subListStr ?: '（空）')
+                '，IMAP 錯誤：' . $lastErr
             );
         }
 
