@@ -4,13 +4,14 @@ require_once __DIR__ . '/db.php';
 requireLogin();
 $user = currentUser();
 
-// 取得目前使用者的 mailbox_imap（作為認領 keyword）
+// 取得目前使用者的 mailbox_imap（顯示用）
 $pdo = getDB();
 $stmt = $pdo->prepare('SELECT mailbox_imap FROM users WHERE id = ?');
 $stmt->execute([$user['id']]);
 $myMailbox = $stmt->fetchColumn() ?: '';
-// keyword 只能 ASCII，&YB2QYA- 符合；若有非法字元改用 username
-$myKeyword = preg_match('/^[\x21-\x7e]+$/', $myMailbox) ? $myMailbox : $user['username'];
+// IMAP keyword 規範（RFC 3501）禁止 & 等字元，mailbox_imap 含 Modified UTF-7 的 & 不合法
+// username 已限制為 [a-zA-Z0-9_\-]，直接作為認領 keyword
+$myKeyword = $user['username'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-TW">

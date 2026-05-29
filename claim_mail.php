@@ -29,12 +29,13 @@ try {
         throw new RuntimeException('您尚未被分配信件匣，無法使用認領功能。');
     }
 
-    $mailboxImap  = $row['mailbox_imap']; // 如 &YB2QYA- 或 CT
+    $mailboxImap  = $row['mailbox_imap']; // 如 &YB2QYA- 或 CT（僅供顯示/歸檔用）
     $username     = $row['username'];
 
-    // IMAP keyword 只能用 ASCII + 部分符號，&YB2QYA- 符合規範
-    // 若包含非法字元則改用 username
-    $keyword = preg_match('/^[\x21-\x7e]+$/', $mailboxImap) ? $mailboxImap : $username;
+    // IMAP keyword 規範（RFC 3501）禁止 & ( ) { \ " % * ] 等字元
+    // mailbox_imap 可能含 Modified UTF-7 的 & 字元，不符合規範會導致 setflag 靜默失敗
+    // username 已限制為 [a-zA-Z0-9_\-]，完全符合 RFC 3501 atom 規範，直接使用
+    $keyword = $username;
 
     $fetcher = new MailFetcher();
 

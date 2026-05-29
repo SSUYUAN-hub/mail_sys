@@ -69,10 +69,10 @@ try {
     unset($group);
 
     // 判斷是否需要背景同步
-    // 用 DB 中最新的 fetched_at 作為最後同步時間
-    $lastSyncRow = $pdo->query('SELECT UNIX_TIMESTAMP(MAX(fetched_at)) AS ts FROM parsed_mails')->fetch();
-    $lastSync    = (int)($lastSyncRow['ts'] ?? 0);
-    $needSync    = $forceRefresh || (time() - $lastSync) > 30; // 超過 30 秒就重新同步
+    // 使用獨立的時間戳記檔案，與 background_sync.php 共用，避免用 fetched_at 誤判
+    $syncFile = sys_get_temp_dir() . '/mail_last_sync.txt';
+    $lastSync = file_exists($syncFile) ? (int)file_get_contents($syncFile) : 0;
+    $needSync = $forceRefresh || (time() - $lastSync) > 30; // 超過 30 秒就重新同步
 
     $result = [
         'success'      => true,
@@ -159,6 +159,9 @@ try {
                     )->execute([$claimedBy, $mailId]);
                 }
             }
+
+            // 背景同步完成，寫入時間戳供下次判斷（與 background_sync.php 共用同一個 key）
+            file_put_contents(sys_get_temp_dir() . '/mail_last_sync.txt', time());
 
         } catch (Throwable $e) {
             error_log('[background_sync] ' . $e->getMessage());
