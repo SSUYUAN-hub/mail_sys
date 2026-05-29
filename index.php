@@ -4,14 +4,21 @@ require_once __DIR__ . '/db.php';
 requireLogin();
 $user = currentUser();
 
-// 取得目前使用者的 mailbox_imap（顯示用）
+// 取得目前使用者的 mailbox_imap 並解碼為顯示名稱
 $pdo = getDB();
 $stmt = $pdo->prepare('SELECT mailbox_imap FROM users WHERE id = ?');
 $stmt->execute([$user['id']]);
 $myMailbox = $stmt->fetchColumn() ?: '';
-// IMAP keyword 規範（RFC 3501）禁止 & 等字元，mailbox_imap 含 Modified UTF-7 的 & 不合法
-// username 已限制為 [a-zA-Z0-9_\-]，直接作為認領 keyword
-$myKeyword = $user['username'];
+
+// 解碼 Modified UTF-7 為顯示名稱（如 &YB2QYA- → 思遠）
+// DB 的 claimed_by 存的是顯示名稱，MY_KEYWORD 也要對應用顯示名稱做比對
+$myDisplayName = $myMailbox ? preg_replace_callback('/&([^-]*)-/', function ($m) {
+    if ($m[1] === '') return '&';
+    $b = str_replace(',', '/', $m[1]);
+    $d = base64_decode($b);
+    return mb_convert_encoding($d, 'UTF-8', 'UTF-16BE');
+}, $myMailbox) : $user['username'];
+$myKeyword = $myDisplayName;
 ?>
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -317,17 +324,10 @@ $myKeyword = $user['username'];
 </div>
 
 <script>
-// 當前使用者的認領 keyword（由 PHP 傳入）
-const MY_KEYWORD = <?php echo json_encode($myKeyword); ?>;
-const MY_DISPLAY = <?php echo json_encode($myMailbox ? (function($mb){
-    // 解碼 Modified UTF-7 顯示名稱
-    return preg_replace_callback('/&([^-]*)-/', function($m){
-        if($m[1]==='') return '&';
-        $b = str_replace(',','/',$m[1]);
-        $d = base64_decode($b);
-        return mb_convert_encoding($d,'UTF-8','UTF-16BE');
-    }, $mb);
-})($myMailbox) : $user['username']); ?>;
+// MY_KEYWORD = 當前使用者的信件匣顯示名稱（如「思遠」）
+// DB 的 claimed_by 存的就是顯示名稱，兩邊統一用顯示名稱比對與顯示
+const MY_KEYWORD = <?php echo json_encode($myDisplayName); ?>;
+const MY_DISPLAY  = <?php echo json_encode($myDisplayName); ?>;
 </script>
 <div class="container">
     <div class="page-header">

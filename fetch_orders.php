@@ -68,8 +68,7 @@ try {
     }
     unset($group);
 
-    // 判斷是否需要背景同步
-    // 使用獨立的時間戳記檔案，與 background_sync.php 共用，避免用 fetched_at 誤判
+    // 判斷是否需要背景同步（用獨立時間戳記檔案，不用 fetched_at 避免誤判）
     $syncFile = sys_get_temp_dir() . '/mail_last_sync.txt';
     $lastSync = file_exists($syncFile) ? (int)file_get_contents($syncFile) : 0;
     $needSync = $forceRefresh || (time() - $lastSync) > 30; // 超過 30 秒就重新同步
@@ -126,19 +125,17 @@ try {
 
             $insertStmt = $pdo->prepare(
                 'INSERT INTO parsed_mails (mail_id, subject, parsed_json, claimed_by, fetched_at, updated_at)
-                 VALUES (?, ?, ?, ?, NOW(), NOW())
+                 VALUES (?, ?, ?, NULL, NOW(), NOW())
                  ON DUPLICATE KEY UPDATE
-                     claimed_by = VALUES(claimed_by),
                      fetched_at = NOW(),
                      updated_at = NOW()'
             );
 
             foreach ($allMails as $mail) {
-                $mailId    = $mail['id'];
-                $claimedBy = $mail['claimed_by'] ?? null;
+                $mailId = $mail['id'];
 
                 if (!isset($existingSet[$mailId])) {
-                    // 新信件：解析
+                    // 新信件：解析並存入，claimed_by 初始為 NULL
                     $order = OrderParser::parse($mail['html_body'], $mail['subject']);
                     if ($order['platform'] === '系統過濾信件') continue;
 
@@ -150,17 +147,16 @@ try {
                         $mailId,
                         $mail['subject'],
                         json_encode($order, JSON_UNESCAPED_UNICODE),
-                        $claimedBy,
                     ]);
                 } else {
-                    // 舊信件：只更新認領狀態和時間
+                    // 舊信件：只更新時間戳，不動 claimed_by（認領狀態由 claim_mail.php 純 DB 管理）
                     $pdo->prepare(
-                        'UPDATE parsed_mails SET claimed_by = ?, fetched_at = NOW(), updated_at = NOW() WHERE mail_id = ?'
-                    )->execute([$claimedBy, $mailId]);
+                        'UPDATE parsed_mails SET fetched_at = NOW(), updated_at = NOW() WHERE mail_id = ?'
+                    )->execute([$mailId]);
                 }
             }
 
-            // 背景同步完成，寫入時間戳供下次判斷（與 background_sync.php 共用同一個 key）
+            // 背景同步完成，寫入時間戳
             file_put_contents(sys_get_temp_dir() . '/mail_last_sync.txt', time());
 
         } catch (Throwable $e) {
