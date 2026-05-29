@@ -4,21 +4,22 @@ require_once __DIR__ . '/db.php';
 requireLogin();
 $user = currentUser();
 
-// 取得目前使用者的 mailbox_imap 並解碼為顯示名稱
+// 取得目前使用者的 mailbox_imap，解碼為顯示名稱作為認領標籤比對用
 $pdo = getDB();
 $stmt = $pdo->prepare('SELECT mailbox_imap FROM users WHERE id = ?');
 $stmt->execute([$user['id']]);
 $myMailbox = $stmt->fetchColumn() ?: '';
 
-// 解碼 Modified UTF-7 為顯示名稱（如 &YB2QYA- → 思遠）
-// DB 的 claimed_by 存的是顯示名稱，MY_KEYWORD 也要對應用顯示名稱做比對
-$myDisplayName = $myMailbox ? preg_replace_callback('/&([^-]*)-/', function ($m) {
+// 解碼：只取最後一段（去掉 INBOX/ 前綴），再解碼 Modified UTF-7
+// 例：INBOX/&YB2QYA- → 思遠；CT → CT
+// DB 的 claimed_by 存的就是此顯示名稱，前端用它判斷「是否是我的認領」
+$_mbSeg = end(preg_split('/[\/.]/', $myMailbox) ?: ['']);
+$myDisplayName = preg_replace_callback('/&([^-]*)-/', function ($m) {
     if ($m[1] === '') return '&';
     $b = str_replace(',', '/', $m[1]);
     $d = base64_decode($b);
     return mb_convert_encoding($d, 'UTF-8', 'UTF-16BE');
-}, $myMailbox) : $user['username'];
-$myKeyword = $myDisplayName;
+}, $_mbSeg) ?: $user['username'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -325,7 +326,7 @@ $myKeyword = $myDisplayName;
 
 <script>
 // MY_KEYWORD = 當前使用者的信件匣顯示名稱（如「思遠」）
-// DB 的 claimed_by 存的就是顯示名稱，兩邊統一用顯示名稱比對與顯示
+// DB 的 claimed_by 存的就是顯示名稱，前端用此做「是否是我的認領」判斷與顯示
 const MY_KEYWORD = <?php echo json_encode($myDisplayName); ?>;
 const MY_DISPLAY  = <?php echo json_encode($myDisplayName); ?>;
 </script>
