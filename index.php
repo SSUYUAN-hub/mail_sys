@@ -13,7 +13,8 @@ $myMailbox = $stmt->fetchColumn() ?: '';
 // 解碼：只取最後一段（去掉 INBOX/ 前綴），再解碼 Modified UTF-7
 // 例：INBOX/&YB2QYA- → 思遠；CT → CT
 // DB 的 claimed_by 存的就是此顯示名稱，前端用它判斷「是否是我的認領」
-$_mbSeg = end(preg_split('/[\/.]/', $myMailbox) ?: ['']);
+$_mbParts = preg_split('/[\/.]/', $myMailbox) ?: [''];
+$_mbSeg   = end($_mbParts);
 $myDisplayName = preg_replace_callback('/&([^-]*)-/', function ($m) {
     if ($m[1] === '') return '&';
     $b = str_replace(',', '/', $m[1]);
