@@ -4,23 +4,20 @@ require_once __DIR__ . '/db.php';
 requireLogin();
 $user = currentUser();
 
-// 取得目前使用者的 mailbox_imap，解碼為顯示名稱作為認領標籤比對用
+// 取得目前使用者的 mailbox_imap，解碼為顯示名稱
 $pdo = getDB();
 $stmt = $pdo->prepare('SELECT mailbox_imap FROM users WHERE id = ?');
 $stmt->execute([$user['id']]);
 $myMailbox = $stmt->fetchColumn() ?: '';
-
-// 解碼：只取最後一段（去掉 INBOX/ 前綴），再解碼 Modified UTF-7
-// 例：INBOX/&YB2QYA- → 思遠；CT → CT
-// DB 的 claimed_by 存的就是此顯示名稱，前端用它判斷「是否是我的認領」
-$_mbParts = preg_split('/[\/.]/', $myMailbox) ?: [''];
-$_mbSeg   = end($_mbParts);
+// 只取最後一段（去掉 INBOX/ 前綴）再解碼 Modified UTF-7 → 顯示名稱（如「思遠」）
+$_mbParts     = preg_split('/[\/.]/', $myMailbox) ?: [''];
+$_mbLastSeg   = end($_mbParts);
 $myDisplayName = preg_replace_callback('/&([^-]*)-/', function ($m) {
     if ($m[1] === '') return '&';
     $b = str_replace(',', '/', $m[1]);
     $d = base64_decode($b);
     return mb_convert_encoding($d, 'UTF-8', 'UTF-16BE');
-}, $_mbSeg) ?: $user['username'];
+}, $_mbLastSeg) ?: $user['username'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -310,6 +307,42 @@ $myDisplayName = preg_replace_callback('/&([^-]*)-/', function ($m) {
             align-items: center;
             gap: 0.5rem;
         }
+        /* 今日入住列 */
+        tr.today-row {
+            background: #fff0f0 !important;
+            border-left: 5px solid #c0392b;
+        }
+        tr.today-row:hover { background: #ffe4e4 !important; }
+        .today-badge {
+            display: inline-block;
+            background: #c0392b;
+            color: white;
+            font-size: 0.68rem;
+            font-weight: bold;
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            margin-left: 0.3rem;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        /* 今日入住新信件提示橫幅 */
+        .today-alert-bar {
+            display: none;
+            background: #c0392b;
+            color: white;
+            border-radius: 6px;
+            padding: 0.55rem 1rem;
+            font-size: 0.85rem;
+            font-weight: bold;
+            align-items: center;
+            gap: 0.5rem;
+            animation: alertPulse 1.5s ease-in-out infinite;
+        }
+        .today-alert-bar.visible { display: flex; }
+        @keyframes alertPulse {
+            0%,100% { opacity: 1; }
+            50%      { opacity: 0.75; }
+        }
     </style>
 </head>
 <body>
@@ -326,8 +359,7 @@ $myDisplayName = preg_replace_callback('/&([^-]*)-/', function ($m) {
 </div>
 
 <script>
-// MY_KEYWORD = 當前使用者的信件匣顯示名稱（如「思遠」）
-// DB 的 claimed_by 存的就是顯示名稱，前端用此做「是否是我的認領」判斷與顯示
+// MY_KEYWORD = 當前使用者信件匣顯示名稱，與 DB claimed_by 一致
 const MY_KEYWORD = <?php echo json_encode($myDisplayName); ?>;
 const MY_DISPLAY  = <?php echo json_encode($myDisplayName); ?>;
 </script>
@@ -343,7 +375,9 @@ const MY_DISPLAY  = <?php echo json_encode($myDisplayName); ?>;
                 <span id="statusText">連線中...</span>
                 <span id="cacheBadge"></span>
             </div>
-            <span class="countdown" id="countdown"></span>
+            <div class="today-alert-bar" id="todayAlertBar">
+                🔴 有今日入住信件，請立即處理
+            </div>
             <button class="btn-refresh" id="btnRefresh" onclick="fetchOrders(true)">
                 🔄 立即同步
             </button>
@@ -354,7 +388,7 @@ const MY_DISPLAY  = <?php echo json_encode($myDisplayName); ?>;
         <div class="loading-overlay">
             <div class="spinner"></div>
             <div>正在載入訂單資料...</div>
-            <div style="font-size:0.8rem;color:#aaa;margin-top:0.5rem;">首次需連接信箱，約需 10～30 秒</div>
+            <div style="font-size:0.8rem;color:#aaa;margin-top:0.5rem;">首次需連接信箱，約需 10～30 秒，喝杯咖啡休息一下吧</div>
         </div>
     </div>
 </div>
@@ -368,9 +402,7 @@ const MY_DISPLAY  = <?php echo json_encode($myDisplayName); ?>;
 </div>
 
 <script>
-let remarkStore    = {};
-let countdownTimer = null;
-const CACHE_TTL    = 180; // 秒，與後端一致
+let remarkStore = {};
 
 function getBadgeClass(p) {
     if (p.includes('AsiaYo'))  return 'bg-asiayo';
@@ -396,12 +428,25 @@ function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// 取得今天的 ISO 日期字串（台灣時間，用來比對 check_in）
+function getTodayISO() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth()+1).padStart(2,'0');
+    const d = String(now.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+}
+const TODAY_ISO = getTodayISO();
+
 function buildMainRow(o, groupId, extraCount) {
     const badge = getBadgeClass(o.platform);
     const isTrip = o.platform.includes('Trip');
     const remark = o.remark || '無';
     const hasLong = isTrip && remark.length > 30;
     if (hasLong) remarkStore[o.mail_id] = remark;
+
+    // 今日入住判斷
+    const isToday = (o.check_in === TODAY_ISO);
 
     const expandBtn = extraCount > 0
         ? `<br><button class="btn-expand" onclick="toggleGroup('${groupId}',this)">+${extraCount} 封 ▼</button>`
@@ -457,9 +502,11 @@ function buildMainRow(o, groupId, extraCount) {
         claimCell = `<button class="btn-claim" onclick="toggleClaim(${o.mail_id}, 'claim', this)">☐ 認領</button>`;
     }
 
+    const todayClass = isToday ? ' today-row' : '';
+    const todayTag   = isToday ? '<span class="today-badge">今日入住</span>' : '';
     return `
-    <tr class="main-row${isModified ? ' modified-row' : ''}" id="row_${o.mail_id}">
-        <td>${escHtml(String(o.mail_id))}${expandBtn}</td>
+    <tr class="main-row${isModified ? ' modified-row' : ''}${todayClass}" id="row_${o.mail_id}">
+        <td>${escHtml(String(o.mail_id))}${expandBtn}${todayTag}</td>
         <td><span class="badge ${badge}">${escHtml(o.platform)}</span></td>
         <td><code style="font-size:0.75rem;">${escHtml(o.ota_number)}</code></td>
         <td><b>${escHtml(o.customer_name)}</b></td>
@@ -562,7 +609,6 @@ function formatLocalTime(unixTs) {
 async function fetchOrders(forceRefresh = false) {
     setStatus('loading', forceRefresh ? '同步中...' : '載入中...');
     document.getElementById('btnRefresh').disabled = true;
-    stopCountdown();
 
     const content = document.getElementById('mainContent');
     // 只有第一次才顯示 loading 動畫
@@ -597,6 +643,13 @@ async function fetchOrders(forceRefresh = false) {
         content.innerHTML  = renderTable(data.groups);
         content.dataset.loaded = '1';
 
+        // 更新已顯示的 mail_id 集合（供 pollClaims 偵測新今日信件用）
+        displayedMailIds = new Set();
+        data.groups.forEach(group => group.forEach(o => displayedMailIds.add(o.mail_id)));
+
+        // 使用者點同步後，清除今日提示橫幅（畫面已是最新）
+        document.getElementById('todayAlertBar')?.classList.remove('visible');
+
         // 若仍在同步中（有新信件待解析）顯示提示
         if (data.is_syncing) {
             const bar = document.createElement('div');
@@ -626,11 +679,6 @@ async function fetchOrders(forceRefresh = false) {
             document.getElementById('cacheBadge').innerHTML = '';
         }
 
-        // 從快取回傳時，倒數剩餘快取時間；否則從頭倒數
-        const remainSec = data.from_cache
-            ? Math.max(0, CACHE_TTL - data.cache_age)
-            : CACHE_TTL;
-        startCountdown(remainSec);
         startPollClaims(); // 啟動認領狀態輪詢
 
     } catch (err) {
@@ -645,7 +693,6 @@ async function fetchOrders(forceRefresh = false) {
             content.prepend(errDiv);
             setTimeout(() => errDiv.remove(), 6000);
         }
-        startCountdown(CACHE_TTL);
     } finally {
         document.getElementById('btnRefresh').disabled = false;
     }
@@ -661,8 +708,8 @@ async function toggleClaim(mailId, action, el) {
         const data = await res.json();
         if (!data.success) throw new Error(data.error || '操作失敗');
 
-        // 立即更新畫面
-        updateClaimCell(mailId, action === 'claim' ? data.keyword : null);
+        // 立即更新畫面（claimed_by 為顯示名稱，如「思遠」）
+        updateClaimCell(mailId, action === 'claim' ? data.claimed_by : null);
     } catch (err) {
         alert('⚠️ ' + err.message);
         el.disabled = false;
@@ -683,8 +730,12 @@ function updateClaimCell(mailId, claimedBy) {
     }
 }
 
-// ── 認領狀態輪詢（每 10 秒）────────────────────────────────
+// ── 背景輪詢：認領狀態 + 今日入住新信件偵測（每 10 秒）────────────────
 let pollTimer = null;
+
+// 目前已顯示在畫面上的 mail_id 集合（fetchOrders 完成後更新）
+let displayedMailIds = new Set();
+
 async function pollClaims() {
     try {
         const res  = await fetch('poll_claims.php', { cache: 'no-store' });
@@ -695,6 +746,20 @@ async function pollClaims() {
         Object.entries(data.claims).forEach(([mailId, claimedBy]) => {
             updateClaimCell(parseInt(mailId), claimedBy);
         });
+
+        // 偵測今日入住新信件：DB 有、但畫面尚未顯示的
+        if (data.today_checkin_ids && data.today_checkin_ids.length > 0) {
+            const hasNew = data.today_checkin_ids.some(id => !displayedMailIds.has(id));
+            const alertBar = document.getElementById('todayAlertBar');
+            if (alertBar) {
+                if (hasNew) {
+                    alertBar.classList.add('visible');
+                } else {
+                    // 全部已顯示：若已有今日入住列在畫面上就不顯示提示
+                    alertBar.classList.remove('visible');
+                }
+            }
+        }
     } catch (e) { /* 網路問題靜默忽略 */ }
 }
 
@@ -710,22 +775,6 @@ function stopPollClaims() {
 function setStatus(type, text) {
     document.getElementById('statusDot').className = 'status-dot ' + type;
     document.getElementById('statusText').textContent = text;
-}
-
-function startCountdown(sec) {
-    stopCountdown();
-    const el = document.getElementById('countdown');
-    el.textContent = `${sec}s 後自動更新`;
-    countdownTimer = setInterval(() => {
-        sec--;
-        el.textContent = sec > 0 ? `${sec}s 後自動更新` : '更新中...';
-        if (sec <= 0) { stopCountdown(); fetchOrders(); }
-    }, 1000);
-}
-
-function stopCountdown() {
-    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-    document.getElementById('countdown').textContent = '';
 }
 
 function toggleGroup(groupId, btn) {

@@ -68,10 +68,24 @@ try {
     }
     unset($group);
 
+    // 今日入住的 group 置頂，其餘維持原順序
+    $today = date('Y-m-d');
+    $todayGroups = [];
+    $otherGroups = [];
+    foreach ($groups as $key => $group) {
+        $checkIn = $group[0]['check_in'] ?? '';
+        if ($checkIn === $today) {
+            $todayGroups[$key] = $group;
+        } else {
+            $otherGroups[$key] = $group;
+        }
+    }
+    $groups = $todayGroups + $otherGroups;
+
     // 判斷是否需要背景同步（用獨立時間戳記檔案，不用 fetched_at 避免誤判）
     $syncFile = sys_get_temp_dir() . '/mail_last_sync.txt';
     $lastSync = file_exists($syncFile) ? (int)file_get_contents($syncFile) : 0;
-    $needSync = $forceRefresh || (time() - $lastSync) > 30; // 超過 30 秒就重新同步
+    $needSync = $forceRefresh || (time() - $lastSync) > 30;
 
     $result = [
         'success'      => true,
@@ -135,7 +149,7 @@ try {
                 $mailId = $mail['id'];
 
                 if (!isset($existingSet[$mailId])) {
-                    // 新信件：解析並存入，claimed_by 初始為 NULL
+                    // 新信件：解析並存入，claimed_by 初始 NULL
                     $order = OrderParser::parse($mail['html_body'], $mail['subject']);
                     if ($order['platform'] === '系統過濾信件') continue;
 
@@ -149,7 +163,7 @@ try {
                         json_encode($order, JSON_UNESCAPED_UNICODE),
                     ]);
                 } else {
-                    // 舊信件：只更新時間戳，不動 claimed_by（認領狀態由 claim_mail.php 純 DB 管理）
+                    // 舊信件：只更新時間戳，不動 claimed_by（由 claim_mail.php 管理）
                     $pdo->prepare(
                         'UPDATE parsed_mails SET fetched_at = NOW(), updated_at = NOW() WHERE mail_id = ?'
                     )->execute([$mailId]);
