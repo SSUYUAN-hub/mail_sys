@@ -1,8 +1,10 @@
 <?php
 // poll_claims.php - 輪詢認領狀態與同步進度
+ob_start();
 require_once __DIR__ . '/auth.php';
 requireLogin();
-
+ob_clean();
+ini_set('display_errors', '0');
 header('Content-Type: application/json; charset=utf-8');
 
 try {

@@ -1,8 +1,10 @@
 <?php
 // archive_mail.php - 歸檔端點，接收 mail_id + platform，執行 IMAP 移動
+ob_start();
 require_once __DIR__ . '/auth.php';
 requireLogin();
-
+ob_clean();
+ini_set('display_errors', '0');
 header('Content-Type: application/json; charset=utf-8');
 
 $user = currentUser();
@@ -77,6 +79,7 @@ try {
         throw new RuntimeException('IMAP 移動失敗');
     }
 
+    ob_clean();
     echo json_encode([
         'success'         => true,
         'mail_id'         => $mailId,
@@ -85,6 +88,7 @@ try {
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {
+    ob_clean();
     http_response_code(400);
     echo json_encode([
         'success' => false,
