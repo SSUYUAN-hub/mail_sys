@@ -16,10 +16,21 @@ class OrderParser {
 
         $data = self::getEmptyTemplate('未知平台');
 
+        // 取消判斷：只看主旨，或 HTML 中有明確的取消標題區塊
+        // 不用 mb_strpos($htmlContent, '取消') 全文掃描，
+        // 因正常訂單信件內也含「取消政策」「取消費用」等字樣，會誤判
         $isCancelled = (
             mb_strpos($subject, '取消') !== false ||
-            mb_strpos($htmlContent, 'CANCELLED') !== false ||
-            mb_strpos($htmlContent, '取消') !== false
+            mb_strpos($subject, 'CANCELLED') !== false ||
+            mb_strpos($subject, 'Cancellation') !== false ||
+            mb_strpos($subject, 'cancellation') !== false ||
+            // HTML 中明確的全大寫取消標記（Agoda/Booking 取消信特有）
+            mb_strpos($htmlContent, '>CANCELLED<') !== false ||
+            mb_strpos($htmlContent, 'BOOKING CANCELLED') !== false ||
+            mb_strpos($htmlContent, 'Reservation Cancelled') !== false ||
+            // Agoda 取消信特有的結構標記
+            mb_strpos($htmlContent, 'cancel-order-info') !== false ||
+            mb_strpos($htmlContent, 'cancel-head-tip') !== false
         );
 
         // 全文純文字（提前定義供過濾判斷使用）

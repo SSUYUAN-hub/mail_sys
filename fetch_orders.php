@@ -137,37 +137,42 @@ try {
             // 已在 DB 的 mail_id
             $existingSet = array_flip($existingIds);
 
+            // claimed_by 刻意不列在 ON DUPLICATE KEY UPDATE 欄位中，
+            // 確保重新解析時不會覆蓋使用者已認領的狀態
             $insertStmt = $pdo->prepare(
                 'INSERT INTO parsed_mails (mail_id, subject, parsed_json, claimed_by, fetched_at, updated_at)
                  VALUES (?, ?, ?, NULL, NOW(), NOW())
                  ON DUPLICATE KEY UPDATE
-                     fetched_at = NOW(),
-                     updated_at = NOW()'
+                     subject     = VALUES(subject),
+                     parsed_json = VALUES(parsed_json),
+                     fetched_at  = NOW(),
+                     updated_at  = NOW()'
             );
 
             foreach ($allMails as $mail) {
                 $mailId = $mail['id'];
 
-                if (!isset($existingSet[$mailId])) {
-                    // 新信件：解析並存入，claimed_by 初始 NULL
-                    $order = OrderParser::parse($mail['html_body'], $mail['subject']);
-                    if ($order['platform'] === '系統過濾信件') continue;
-
-                    $order['mail_id']       = $mailId;
-                    $order['check_in_roc']  = OrderParser::toROCDate($order['check_in']);
-                    $order['check_out_roc'] = OrderParser::toROCDate($order['check_out']);
-
-                    $insertStmt->execute([
-                        $mailId,
-                        $mail['subject'],
-                        json_encode($order, JSON_UNESCAPED_UNICODE),
-                    ]);
-                } else {
-                    // 舊信件：只更新時間戳，不動 claimed_by（由 claim_mail.php 管理）
-                    $pdo->prepare(
-                        'UPDATE parsed_mails SET fetched_at = NOW(), updated_at = NOW() WHERE mail_id = ?'
-                    )->execute([$mailId]);
+                // 新信件或舊信件都重新解析，確保 parser 修正後資料能更新
+                // claimed_by 透過 ON DUPLICATE KEY 的欄位選擇保持不變
+                $order = OrderParser::parse($mail['html_body'], $mail['subject']);
+                if ($order['platform'] === '系統過濾信件') {
+                    // 若原本存在但現在被過濾，從 DB 刪除
+                    if (isset($existingSet[$mailId])) {
+                        $pdo->prepare('DELETE FROM parsed_mails WHERE mail_id = ?')
+                            ->execute([$mailId]);
+                    }
+                    continue;
                 }
+
+                $order['mail_id']       = $mailId;
+                $order['check_in_roc']  = OrderParser::toROCDate($order['check_in']);
+                $order['check_out_roc'] = OrderParser::toROCDate($order['check_out']);
+
+                $insertStmt->execute([
+                    $mailId,
+                    $mail['subject'],
+                    json_encode($order, JSON_UNESCAPED_UNICODE),
+                ]);
             }
 
             // 背景同步完成，寫入時間戳
